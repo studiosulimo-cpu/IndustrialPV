@@ -1,0 +1,1969 @@
+<title>Preventivatore FV Industriale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: banco di lavoro a due colonne — dati a sinistra, riepilogo economico fisso a destra, verifiche e computo a tutta larghezza sotto */
+:root{
+  --bg:#ECEFEE; --surface:#FFFFFF; --sunk:#F5F7F6; --ink:#141C1A; --muted:#5A6764; --line:#D3DBD8;
+  --accent:#2441A6; --accent-ink:#FFFFFF; --accent-soft:#E3E8F7; --copper:#A85A1C;
+  --ok:#1D7448; --ok-bg:#E2F2E8; --warn:#8E5B00; --warn-bg:#FBF0D9; --err:#AE2A20; --err-bg:#FBE4E1; --info:#3F5677; --info-bg:#E7ECF3;
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif; --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1514; --surface:#171F1E; --sunk:#121918; --ink:#E3E9E7; --muted:#97A5A1; --line:#2B3634;
+  --accent:#8EA6FF; --accent-ink:#0E1630; --accent-soft:#1F2847; --copper:#E39A5C;
+  --ok:#6FD39C; --ok-bg:#163527; --warn:#F0BE5A; --warn-bg:#3A2D11; --err:#FF8A7E; --err-bg:#43201C; --info:#A9BEDD; --info-bg:#1F2A3A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1514; --surface:#171F1E; --sunk:#121918; --ink:#E3E9E7; --muted:#97A5A1; --line:#2B3634;
+  --accent:#8EA6FF; --accent-ink:#0E1630; --accent-soft:#1F2847; --copper:#E39A5C;
+  --ok:#6FD39C; --ok-bg:#163527; --warn:#F0BE5A; --warn-bg:#3A2D11; --err:#FF8A7E; --err-bg:#43201C; --info:#A9BEDD; --info-bg:#1F2A3A; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);margin:0}
+.wrap{max-width:1440px;margin:0 auto;padding-inline:20px;padding-block:0 48px}
+h1,h2,h3{font-family:var(--f-display);font-stretch:88%;text-wrap:balance;margin:0}
+.num,.kv,.cv,.cp,td.num,dd,.big,.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* testata */
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin-inline:-20px;padding:12px 20px}
+.toprow{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;max-width:1440px;margin:0 auto}
+.brand{display:flex;flex-direction:column;gap:2px;min-width:0}
+.brand h1{font-size:22px;font-weight:750;letter-spacing:.01em}
+.plate{font:11px/1.2 var(--f-mono);color:var(--muted);letter-spacing:.04em}
+.tabs{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:3px;gap:3px}
+.tab{border:0;background:transparent;padding:7px 14px;border-radius:4px;cursor:pointer;font-weight:600;font-size:14px;color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+.proj{flex:1 1 220px;display:flex;gap:8px;align-items:center;min-width:0}
+.proj input{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:7px 10px}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:7px 12px;cursor:pointer;font-size:13.5px;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:var(--err);color:var(--err)}
+#projects{max-width:1440px;margin:12px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:grid;gap:12px;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
+#projList{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:240px;overflow:auto}
+#projList li{display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line);padding:6px 0}
+#projList li>div{flex:1;min-width:0;display:flex;flex-direction:column}
+#projList span{color:var(--muted);font-size:12.5px}
+#projList .empty{color:var(--muted)}
+.imp{display:flex;flex-direction:column;gap:6px}
+.imp textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:var(--r);background:var(--sunk);padding:8px;font:12px var(--f-mono)}
+.imp .hint{font-size:12.5px;color:var(--muted)}
+
+/* griglia principale */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;margin-top:20px;align-items:start}
+#form{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-width:0}
+#form > .blk{margin-top:0}
+details.sec{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+details.sec>summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);margin-right:4px;transition:transform .15s;align-self:center}
+details.sec[open]>summary::before{transform:rotate(45deg)}
+.sec-t{font-family:var(--f-display);font-weight:700;font-size:16.5px;font-stretch:90%}
+.sec-s{color:var(--muted);font-size:13px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px 14px;padding:4px 16px 16px;border-top:1px solid var(--line);padding-top:14px}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld.wide{grid-column:1/-1}
+.fld>*{flex-shrink:0}
+.fld.chk>span:first-of-type{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
+.fld>label{font-size:12.5px;color:var(--muted);font-weight:500;line-height:1.3}
+.inp{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:var(--r);background:var(--sunk);overflow:hidden}
+.inp:focus-within{border-color:var(--accent)}
+.inp input{flex:1;min-width:0;border:0;background:transparent;padding:7px 9px;font-family:var(--f-mono);font-size:14px;outline:none}
+.inp input::placeholder{color:var(--copper);opacity:1}
+.inp .u{padding:7px 9px 7px 2px;color:var(--muted);font-size:12px;white-space:nowrap;align-self:center}
+.fld select,.fld input[type=text]{border:1px solid var(--line);border-radius:var(--r);background:var(--sunk);padding:7px 9px;min-width:0;width:100%}
+.fld.chk{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px;cursor:pointer;padding-top:18px}
+.fld.chk input{width:17px;height:17px;accent-color:var(--accent)}
+.fld.chk span:first-of-type{font-size:14px}
+.help{font-size:11.5px;color:var(--muted);line-height:1.35}
+.fld.chk .help{flex-basis:100%}
+.help.src{color:var(--copper);font-family:var(--f-mono)}
+
+/* riepilogo */
+aside.sum{position:sticky;top:calc(env(safe-area-inset-top,0px) + 84px);display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.kpi{background:var(--surface);padding:10px 12px;display:flex;flex-direction:column;min-width:0}
+.kl{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.kv{font-size:21px;font-weight:500;line-height:1.25}
+.ku{font-size:12px;color:var(--muted)}
+.card h2{font-size:15px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+#cats{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+#cats li{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;gap:2px 8px;align-items:baseline;font-size:13px}
+.cn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cv{text-align:right;font-size:12.5px}
+.cp{text-align:right;color:var(--muted);font-size:12px}
+.cbar{grid-column:1/-1;height:4px;background:var(--sunk);border-radius:2px;overflow:hidden}
+.cbar i{display:block;height:100%;background:var(--accent);border-radius:2px}
+.costline{display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-top:1px solid var(--line);margin-top:12px;padding-top:10px}
+.costline b{font-family:var(--f-display);font-size:15px}
+.big{font-size:24px;font-weight:500}
+.sub{color:var(--muted);font-size:12.5px;text-align:right}
+.pricing{border:2px solid var(--accent);background:var(--surface)}
+.pbox{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:10px}
+.pbox label{min-width:0}
+.pbox label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.pbox .inp{background:var(--accent-soft);border-color:var(--accent)}
+.pbox .inp input{font-size:18px;padding:9px 10px;width:100%}
+.pres{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.pres div{display:flex;flex-direction:column}
+.pres span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.pres b{font-family:var(--f-mono);font-weight:500;font-size:15px}
+#mode-note,.vat{font-size:12px;color:var(--muted);margin-top:8px}
+.pill{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.err{background:var(--err-bg);color:var(--err)} .pill.info{background:var(--info-bg);color:var(--info)}
+
+/* sezioni sotto */
+section.blk{margin-top:28px}
+.blkhead{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+.blkhead h2{font-size:21px;font-weight:750}
+.blkhead p{margin:0;color:var(--muted);font-size:13.5px}
+.two{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.checks li{background:var(--surface);display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;padding:9px 12px;align-items:start}
+.checks li .pill{justify-self:start;margin-top:2px}
+.checks li.chk-err{background:linear-gradient(90deg,var(--err-bg),var(--surface) 40%)}
+.checks b{display:block;font-weight:600;font-size:14px}
+.checks span{display:block;font-size:13px;color:var(--muted)}
+.checks em{display:block;font-style:normal;font-family:var(--f-mono);font-size:11.5px;color:var(--copper);margin-top:2px}
+.dims{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:4px 14px}
+.dims>div{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.3fr);gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.dims>div:last-child{border-bottom:0}
+.dims dt{color:var(--muted);font-size:13px}
+.dims dd{margin:0;font-size:13px}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table.boq{width:100%;border-collapse:collapse;min-width:760px;font-size:13.5px}
+.boq th,.boq td{padding:7px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+.boq thead th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;background:var(--sunk);position:sticky;top:0}
+.boq .num{text-align:right;white-space:nowrap}
+.boq tr.grp th{font-family:var(--f-display);font-size:14.5px;font-weight:700;background:var(--sunk);font-stretch:92%}
+.boq tr.grp th.num{font-family:var(--f-mono);font-weight:500;font-size:13.5px}
+.boq td.desc small{display:block;color:var(--copper);font-family:var(--f-mono);font-size:11px}
+.boq td.um{color:var(--muted);white-space:nowrap}
+.boq td.pu{width:150px}
+.puw{display:flex;gap:4px;align-items:center;justify-content:flex-end}
+.puw input{width:110px;text-align:right;border:1px solid transparent;background:transparent;border-radius:4px;padding:4px 6px;font-family:var(--f-mono);font-size:13.5px}
+.puw input:hover{border-color:var(--line)}
+.puw input:focus{border-color:var(--accent);background:var(--sunk);outline:none}
+tr.edited .puw input{background:var(--warn-bg);color:var(--warn);font-weight:500}
+.rst{border:0;background:transparent;cursor:pointer;color:var(--warn);font-size:15px;padding:0 2px}
+.boq tbody.foot td{background:var(--sunk)}
+.boq tr.tot td{font-weight:600;font-family:var(--f-display);font-size:15px}
+.boq tr.tot td.num{font-family:var(--f-mono);font-weight:500}
+.boqbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#ovInfo{font-size:12.5px;color:var(--muted)}
+.recap{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:var(--line);border:2px solid var(--accent);border-radius:var(--r);overflow:hidden}
+.recap>div{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.recap .rl{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.recap .rv{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:22px;font-weight:500}
+.recap .rn{font-size:12px;color:var(--muted)}
+.recap .us .rv{color:var(--ink)} .recap .them .rv{color:var(--accent)}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.notes .card h3{font-size:15px;margin-bottom:6px}
+.notes .card ul{margin:0;padding-left:18px;font-size:13px;color:var(--muted);display:grid;gap:4px}
+.notes .card li b{color:var(--ink);font-weight:600}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:var(--r);font-size:13.5px;z-index:20;max-width:calc(100% - 32px)}
+body[data-mode="roof"] .only-cp,body[data-mode="carport"] .only-roof{display:none}
+
+@media (max-width:1080px){.main{grid-template-columns:minmax(0,1fr)} aside.sum{position:static;order:-1} .two{grid-template-columns:minmax(0,1fr)} #projects{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){.wrap{padding-inline:16px} header.top{margin-inline:-16px;padding:10px 16px;position:static} .brand h1{font-size:19px} .fgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px} .pbox{grid-template-columns:minmax(0,1fr)} .kv{font-size:18px} .checks li{grid-template-columns:minmax(0,1fr)} .dims>div{grid-template-columns:minmax(0,1fr);gap:2px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---- siti e sezioni ---- */
+.crumb{display:flex;align-items:center;gap:8px;font-family:var(--f-display);font-weight:650;font-size:16px;min-width:0}
+.crumb .sep{color:var(--muted)} .crumbsite{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
+.brandbtn{border:0;background:none;padding:0;cursor:pointer;text-align:left;color:inherit}
+#saveState{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.linkpill{border:0;cursor:pointer}
+#backup{max-width:1440px;margin:12px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:grid;gap:14px;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
+#backup h3{font-size:15px;margin-bottom:6px} #backup p{margin:0 0 8px;font-size:13px;color:var(--muted)}
+#backup ol{margin:0;padding-left:18px;font-size:13px;color:var(--muted);display:grid;gap:3px}
+.filebtn{position:relative;overflow:hidden;display:inline-flex;align-items:center}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.home-head{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin:22px 0 12px}
+.home-head h2{font-size:24px;font-weight:750}
+.home-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.home-tools input{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:7px 10px;min-width:0;width:240px;max-width:60vw}
+table.grid{width:100%;border-collapse:collapse;font-size:13.5px;min-width:820px}
+table.grid th,table.grid td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+table.grid thead th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;background:var(--sunk)}
+table.grid .num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+table.grid td small{display:block;color:var(--muted);font-size:12px}
+table.grid tfoot td{background:var(--sunk);font-size:13px}
+table.grid tfoot tr.tot td{font-weight:600;font-family:var(--f-display);font-size:14.5px;border-top:2px solid var(--line)}
+table.grid tfoot tr.tot td.num{font-family:var(--f-mono);font-weight:500}
+.empty{color:var(--muted);text-align:center;padding:22px!important}
+.muted{color:var(--muted)}
+.lnk{border:0;background:none;padding:0;color:var(--accent);font-weight:600;cursor:pointer;text-align:left;font-size:14px}
+.lnk:hover{text-decoration:underline}
+.acts-cell{white-space:nowrap;text-align:right!important}
+.acts-cell .btn{margin-left:4px}
+.workflow{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.workflow .card p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.sitehead{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr);gap:10px 14px;margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.sitehead label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);font-weight:500;min-width:0}
+.sitehead input,.sitehead textarea{border:1px solid var(--line);background:var(--sunk);border-radius:var(--r);padding:7px 9px;font-size:14px;color:var(--ink);min-width:0;width:100%}
+.sitehead input#sName{font-family:var(--f-display);font-weight:700;font-size:18px}
+.sitehead .wide{grid-column:1/-1}
+.sitehead textarea{min-height:38px;resize:vertical;font-size:13px}
+#tabs{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;align-items:stretch}
+.tabchip{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:7px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0;max-width:260px}
+.tabchip b{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tabchip span{font-size:11.5px;color:var(--muted);font-family:var(--f-mono)}
+.tabchip.roof{border-left:4px solid var(--accent)} .tabchip.carport{border-left:4px solid var(--copper)}
+.tabchip.haserr span{color:var(--err)}
+.tabchip.on{background:var(--accent);border-color:var(--accent)} .tabchip.on b,.tabchip.on span{color:var(--accent-ink)}
+.addsec{display:flex;gap:6px;align-items:center;margin-left:auto}
+#secBar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+#secBar .lab{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+#secType{font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+#secName{flex:1 1 220px;min-width:0;border:1px solid var(--line);background:var(--sunk);border-radius:var(--r);padding:7px 9px;font-family:var(--f-display);font-weight:650;font-size:15px}
+.secbtns{display:flex;gap:6px;flex-wrap:wrap}
+.tag{font-style:normal;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--sunk);color:var(--muted);border:1px solid var(--line);margin-right:4px}
+.recapbar{display:flex;gap:8px;flex-wrap:wrap}
+table.grid.compact{min-width:640px}
+details.okfold{margin-top:8px}
+details.okfold>summary{cursor:pointer;font-size:13px;color:var(--ok);font-weight:600;padding:6px 2px}
+details.okfold .checks{margin-top:6px}
+details.method>summary{cursor:pointer;list-style:none;font-family:var(--f-display);font-size:21px;font-weight:750}
+details.method>summary::-webkit-details-marker{display:none}
+details.method>summary::after{content:" +";color:var(--muted)} details.method[open]>summary::after{content:" −"}
+details.method .notes{margin-top:12px}
+
+#printArea{display:none}
+#printMenu{position:fixed;z-index:30;top:calc(env(safe-area-inset-top,0px) + 64px);right:20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px;display:flex;flex-direction:column;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+#printMenu[hidden]{display:none}
+@media print{
+  @page{size:A4;margin:14mm 12mm}
+  html,body{background:#fff!important;color:#111!important}
+  body>*:not(#printArea){display:none!important}
+  #printArea{display:block!important;font:10.5pt/1.4 "IBM Plex Sans",Arial,sans-serif;color:#111}
+  #printArea *{color:#111!important;background:transparent!important;box-shadow:none!important}
+  .pr-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:10px}
+  .pr-head h1{font:700 17pt "Archivo",Arial,sans-serif;margin:0}
+  .pr-head .meta{font-size:9pt;text-align:right;line-height:1.35}
+  .pr-sub{font-size:9pt;margin:0 0 10px}
+  .pr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid #999;margin-bottom:12px}
+  .pr-grid>div{padding:7px 9px;border-right:1px solid #ccc;border-bottom:1px solid #ccc}
+  .pr-grid .l{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:.06em}
+  .pr-grid .v{display:block;font:500 13pt "IBM Plex Mono",monospace}
+  .pr-grid .n{display:block;font-size:7.5pt}
+  #printArea h2{font:700 12pt "Archivo",Arial,sans-serif;margin:14px 0 5px;break-after:avoid}
+  #printArea table{width:100%;border-collapse:collapse;font-size:8.8pt;margin-bottom:6px}
+  #printArea th,#printArea td{border-bottom:1px solid #ccc;padding:3px 5px;text-align:left;vertical-align:top}
+  #printArea th{font-size:7.5pt;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #111}
+  #printArea td.n,#printArea th.n{text-align:right;font-family:"IBM Plex Mono",monospace;white-space:nowrap}
+  #printArea tr.g td{font-weight:700;border-bottom:1px solid #777;padding-top:6px}
+  #printArea tr.t td{font-weight:700;border-top:1.5px solid #111}
+  #printArea tr{break-inside:avoid}
+  .pr-sec{break-before:page}
+  .pr-notes{font-size:9pt;border:1px solid #ccc;padding:6px 8px;white-space:pre-wrap}
+  .pr-foot{margin-top:12px;font-size:7.5pt;border-top:1px solid #999;padding-top:4px}
+  .pr-warn{font-size:8.5pt;border:1px solid #111;padding:5px 8px;margin:6px 0}
+}
+@media (max-width:1080px){#backup{grid-template-columns:minmax(0,1fr)} .sitehead{grid-template-columns:minmax(0,1fr)} .addsec{margin-left:0}}
+</style>
+<div class="wrap">
+  <header class="top">
+    <div class="toprow">
+      <button class="brand brandbtn" id="navHome" type="button" title="Torna all'elenco dei siti"><h1>Preventivatore FV Industriale</h1><span class="plate">STC 1000 W/m² · 25 °C · AM 1,5 — stima di costo, IVA esclusa</span></button>
+      <div class="crumb" id="crumb"></div>
+      <div id="saveState" aria-live="polite"></div>
+      <div class="acts" style="margin-left:auto">
+        <button class="btn" id="btnHome" type="button" hidden>← Siti</button><button class="btn" id="btnPrint" type="button" hidden>Stampa</button><button class="btn" id="btnBackup" type="button">Backup e importazione</button>
+      </div>
+    </div>
+    <div id="backup" hidden>
+      <div>
+        <h3>Backup</h3>
+        <p>I siti si salvano da soli in questo browser. Per lavorare da un altro computer o per non perdere dati, esporta il backup e salvalo in una cartella cloud.</p>
+        <div class="acts"><button class="btn primary sm" id="bkDownload" type="button">Scarica backup di tutti i siti</button><button class="btn sm" id="bkSite" type="button" hidden>Scarica solo il sito aperto</button><button class="btn sm ghost" id="bkCopy" type="button">Copia backup come testo</button></div>
+        <ol style="margin-top:10px"><li>In ufficio: <b>Scarica backup</b> e salva il file .json su OneDrive/Drive.</li><li>A casa: apri lo strumento, <b>Importa file</b> e scegli lo stesso .json.</li><li>Prima di tornare in ufficio, ripeti al contrario. L'importazione tiene sempre la versione più recente di ogni sito.</li></ol>
+      </div>
+      <div class="imp">
+        <h3>Importa</h3>
+        <div class="acts"><span class="btn sm filebtn">Importa file .json<input type="file" id="importFile" accept=".json,application/json"></span></div>
+        <label for="importTxt" class="muted" style="font-size:12.5px">oppure incolla qui il testo del backup</label>
+        <textarea id="importTxt" placeholder="Testo del backup"></textarea>
+        <div class="acts"><button class="btn sm primary" id="bkImport" type="button">Importa testo</button></div>
+      </div>
+    </div>
+  </header>
+
+  <section id="vHome" hidden>
+    <div class="home-head">
+      <h2>Siti</h2>
+      <div class="home-tools"><input id="siteSearch" type="search" placeholder="Cerca per sito, località o cliente" aria-label="Cerca sito"><button class="btn primary" id="btnNewSite" type="button">Nuovo sito</button></div>
+    </div>
+    <div class="tablewrap"><table class="grid" id="sitesTable"></table></div>
+    <div class="workflow">
+      <div class="card"><b>1 · Un sito per località</b><p>Crea un sito per ogni stabilimento o indirizzo: un solo punto di connessione, una sola cabina.</p></div>
+      <div class="card"><b>2 · Una sezione per area</b><p>Aggiungi un tetto o una pensilina per ogni copertura o parcheggio, ognuna con struttura e moduli propri.</p></div>
+      <div class="card"><b>3 · Costi comuni una volta</b><p>Connessione, pratiche, cantiere e coordinamento si calcolano sul totale del sito.</p></div>
+    </div>
+  </section>
+
+  <section id="vSite" hidden>
+    <div class="sitehead">
+      <label>Sito<input id="sName" data-sk="name" type="text" placeholder="Nome del sito"></label>
+      <label>Località<input id="sLoc" data-sk="location" type="text" placeholder="Comune (provincia)"></label>
+      <label>Cliente<input id="sClient" data-sk="client" type="text" placeholder="Cliente"></label>
+      <label class="wide">Note<textarea id="sNotes" data-sk="notes" placeholder="Accessi, vincoli, referenti, stato dell'offerta"></textarea></label>
+    </div>
+    <nav id="tabs" aria-label="Schede del sito"></nav>
+    <div id="secBar" hidden>
+      <span class="lab">Sezione</span><span id="secType"></span>
+      <input id="secName" type="text" aria-label="Nome della sezione">
+      <div class="secbtns">
+        <button class="btn sm ghost" id="secPrev" type="button" title="Scheda precedente">‹ Precedente</button>
+        <button class="btn sm ghost" id="secNext" type="button" title="Scheda successiva">Successiva ›</button>
+        <button class="btn sm ghost" id="secLeft" type="button" title="Sposta a sinistra">◀</button>
+        <button class="btn sm ghost" id="secRight" type="button" title="Sposta a destra">▶</button>
+        <button class="btn sm" id="secDup" type="button">Duplica</button>
+        <button class="btn sm ghost" id="secDel" type="button">Elimina</button>
+      </div>
+    </div>
+    <div class="main">
+      <div id="form" aria-label="Dati"></div>
+      <aside class="sum" aria-label="Totali del sito">
+        <div class="kpis" id="kpis"></div>
+        <div class="card">
+          <h2><span>Costo del sito per categoria</span><span id="chkSum"></span></h2>
+          <ul id="cats"></ul>
+          <div class="costline"><b>Costo di commessa</b><div><div class="big" id="costTot">—</div><div class="sub" id="costWp"></div></div></div>
+        </div>
+        <div class="card pricing">
+          <div class="pbox">
+            <label for="markup">Markup sul costo<span class="inp"><input id="markup" type="number" step="0.5" inputmode="decimal"><span class="u">%</span></span></label>
+            <label for="price">Prezzo di vendita<span class="inp"><input id="price" type="number" step="100" inputmode="decimal"><span class="u">€</span></span></label>
+          </div>
+          <div class="pres">
+            <div><span>Margine sul prezzo</span><b id="margin">—</b></div>
+            <div><span>Utile lordo</span><b id="profit">—</b></div>
+            <div><span>Prezzo</span><b id="priceWp">—</b></div>
+          </div>
+          <div id="mode-note"></div>
+          <div class="vat">IVA esclusa. Per la fornitura con posa di impianti FV si applica di norma il 10% (DPR 633/72, Tab. A parte III n. 127-quinquies/sexies): verificare caso per caso.</div>
+        </div>
+      </aside>
+    </div>
+    <div id="lower"></div>
+    <section class="blk">
+      <div class="blkhead"><div><h2>Riepilogo commessa</h2><p id="recapSub"></p></div><div class="recapbar"><button class="btn sm primary" id="btnPrintRecap" type="button">Stampa riepilogo</button><button class="btn sm" id="btnPrintFull" type="button">Stampa completa</button><button class="btn sm" id="btnCopyRecap" type="button">Copia riepilogo</button><button class="btn sm" id="btnCopyAll" type="button">Copia computo completo</button></div></div>
+      <div class="recap" id="recap"></div>
+    </section>
+    <section class="blk"><details class="method"><summary>Metodo e riferimenti</summary>
+    <div class="notes">
+      <div class="card"><h3>Siti e sezioni</h3><ul>
+        <li><b>Sito</b> = un punto di connessione. La connessione (BT/MT), SPI, cabina, CCI, pratiche, progetto elettrico, direzione lavori, box di cantiere, DPI e coordinamento sicurezza si contano <b>una volta</b> sulla potenza totale.</li>
+        <li><b>Sezione</b> = tetto o pensilina con moduli, struttura, inverter, cavi, sicurezza di copertura, noli e opere proprie.</li>
+        <li><b>Quota comune</b>: costi comuni, trasporto e imprevisti ripartiti tra le sezioni in proporzione ai kWp. Serve a confrontare le sezioni; il prezzo vero è il totale di sito.</li>
+        <li><b>Durata</b>: una squadra che lavora le sezioni in sequenza; i mesi di cantiere guidano box, WC e trasferte.</li>
+      </ul></div>
+      <div class="card"><h3>Dimensionamento elettrico</h3><ul>
+        <li><b>Stringhe.</b> Voc a Tmin ≤ tensione massima di inverter e modulo; Vmpp a Tmax ≥ minimo MPPT; Isc per MPPT entro il limite di ingresso. La lunghezza viene scelta per avvicinare la potenza obiettivo.</li>
+        <li><b>Fusibili di stringa</b> quando (Np−1)·1,25·Isc supera la corrente inversa del modulo (IEC 62548, CEI 64-8/7 sez. 712).</li>
+        <li><b>Cavo DC</b>: ΔV = 2·L·I·ρ(T)/(S·V), con ρ del rame stagnato a 70 °C; portata EN 50618 ridotta per temperatura, posa e raggruppamento.</li>
+        <li><b>Cavo AC</b>: Ib ≤ In ≤ Iz (CEI 64-8), portate IEC 60364-5-52 metodo E, ΔV trifase senza reattanza. Conduttori in parallelo solo da 50 mm².</li>
+      </ul></div>
+      <div class="card"><h3>Connessione e protezioni</h3><ul>
+        <li><b>BT (CEI 0-21)</b>: oltre 11,08 kW SPI esterno; oltre 20 kW dispositivo di rincalzo; oltre 100 kW la connessione è di norma in MT (TICA).</li>
+        <li><b>MT (CEI 0-16)</b>: adeguamento cabina, SPI con TV, misura M2; CCI per impianti ≥ 100 kW (All. O, del. ARERA 540/2021).</li>
+        <li><b>Prevenzione incendi</b>: Nota DCPREV 1324/2012 e chiarimenti, sgancio di emergenza, cartellonistica; pratica VVF se l'attività è soggetta (DPR 151/2011).</li>
+        <li><b>Fulminazione</b>: valutazione CEI EN 62305-2; con LPS si passa a SPD tipo 1+2.</li>
+      </ul></div>
+      <div class="card"><h3>Sicurezza, noli e manodopera</h3><ul>
+        <li><b>Sicurezza</b> (D.Lgs. 81/08 Titolo IV): parapetti UNI EN 13374, ponteggio con PiMUS, protezione lucernari (art. 148), linea vita EN 795, baraccamenti, CSP/CSE.</li>
+        <li><b>Noli</b>: giorni di autogru dal numero di tiri (pallet moduli, strutture, zavorre); PLE per la durata della posa.</li>
+        <li><b>Manodopera</b> da rese orarie per attività (h/modulo per tipologia di copertura, h/stringa, h/m di linea in funzione della sezione); la durata determina mesi di nolo e di cantiere.</li>
+      </ul></div>
+      <div class="card"><h3>Cosa resta un'ipotesi</h3><ul>
+        <li><b>Prezzi unitari</b>: valori di riferimento 2026 da sostituire con quotazioni reali. Moduli calibrati sull'indice pvXchange di agosto 2026.</li>
+        <li><b>Zavorre e incidenza acciaio</b>: stime parametriche. Il valore vero viene dal calcolo strutturale (NTC 2018 §3.3 vento, §3.4 neve).</li>
+        <li><b>Moduli Jinko</b>: Voc, Vmp, Isc, Imp, coefficienti, dimensioni, peso e pallet dai datasheet ufficiali indicati sotto il menu. I profili "Generico" e gli inverter restano valori tipici di categoria.</li><li><b>Strutture</b>: componenti con prezzi stimati per forniture C&amp;I. Il budget automatico usa un riferimento di mercato in €/kWp per tipologia (sola fornitura, posa esclusa), corretto per taglia e, per le pensiline, per il carico neve. Le fonti pubbliche sono scarse: è una stima da sostituire con l'offerta del fornitore.</li>
+        <li><b>Titolo edilizio della pensilina</b>: il regime (attività libera, PAS, permesso) dipende dal sito e va verificato col D.Lgs. 190/2024.</li>
+      </ul></div>
+    </div>
+    </details></section>
+  </section>
+</div>
+<div id="printArea" aria-hidden="true"></div>
+<div id="printMenu" hidden><button class="btn sm primary" id="pmRecap" type="button">Riepilogo (2 pagine circa)</button><button class="btn sm" id="pmFull" type="button">Completa con computo</button></div>
+<div id="toast" hidden role="status"></div>
+<script>/* ============================================================
+   MOTORE DI CALCOLO — Stima costi FV su copertura industriale
+   e su pensilina (carport). Nessuna dipendenza dal DOM.
+   ============================================================ */
+(function (root) {
+'use strict';
+
+/* ---------- Preset moduli (valori tipici: sostituire con datasheet) ---------- */
+const MOD_PRESETS = {
+  // Jinko Solar — valori STC dai datasheet ufficiali (vedi 'src'). Prezzo: indice pvXchange ago 2026 per categoria, non quotazione Jinko.
+  j620b: { name: 'Jinko Tiger Neo JKM620N-66HL4M-BDV · bifacciale · 2382×1134', src: 'Datasheet JKM605-630N-66HL4M-BDV-F3-EN (2024)', p: 620, voc: 49.08, vmp: 40.74, isc: 16.08, imp: 15.22, bvoc: -0.25, gp: -0.29, L: 2.382, W: 1.134, kg: 32.4, fuse: 35, vmax: 1500, price: 72, pallet: 36 },
+  j670b: { name: 'Jinko Tiger Neo III JKM670N-66QL6-BDV · bifacciale · 2382×1134', src: 'Datasheet JKM650-670N-66QL6-BDV (preliminare, 2025)', p: 670, voc: 50.98, vmp: 43.09, isc: 16.22, imp: 15.55, bvoc: -0.24, gp: -0.26, L: 2.382, W: 1.134, kg: 32.5, fuse: 35, vmax: 1500, price: 84, pallet: 36 },
+  j720b: { name: 'Jinko Tiger Neo JKM720N-66HL5-BDV · bifacciale · 2384×1303', src: 'Datasheet JKM710-735N-66HL5-BDV-Z4-EU (2025)', p: 720, voc: 49.04, vmp: 40.89, isc: 18.67, imp: 17.61, bvoc: -0.25, gp: -0.29, L: 2.384, W: 1.303, kg: 37.5, fuse: 35, vmax: 1500, price: 84, pallet: 33 },
+  j600m: { name: 'Jinko Tiger Neo JKM600N-72HL4-V · monofacciale · 2278×1134', src: 'Datasheet JKM590-615N-72HL4-V-F8C1 (2024)', p: 600, voc: 52.95, vmp: 44.06, isc: 14.25, imp: 13.62, bvoc: -0.25, gp: -0.29, L: 2.278, W: 1.134, kg: 27.0, fuse: 25, vmax: 1500, price: 73, pallet: 36 },
+  g455:  { name: 'Generico TOPCon 108 mezze celle · 1762×1134', src: 'Valori tipici di categoria (non da datasheet)', p: 455, voc: 39.9, vmp: 33.2, isc: 14.38, imp: 13.71, bvoc: -0.25, gp: -0.29, L: 1.762, W: 1.134, kg: 21.5, fuse: 25, vmax: 1500, price: 57, pallet: 36 },
+  g540:  { name: 'Generico TOPCon 132 mezze celle · 2094×1134', src: 'Valori tipici di categoria (non da datasheet)', p: 540, voc: 47.6, vmp: 39.6, isc: 14.35, imp: 13.64, bvoc: -0.25, gp: -0.29, L: 2.094, W: 1.134, kg: 28.5, fuse: 25, vmax: 1500, price: 65, pallet: 36 }
+};
+
+/* ---------- Preset inverter di stringa (generici: verificare datasheet) ---------- */
+const INV_PRESETS = {
+  i10:  { name: 'Trifase 10 kW · 2 MPPT',  pac: 10,  mppt: 2,  inp: 1, vmax: 1100, vmin: 140, vmaxm: 980, imax: 20, isc: 30, iac: 16.9, vac: 400, price: 1100 },
+  i15:  { name: 'Trifase 15 kW · 2 MPPT',  pac: 15,  mppt: 2,  inp: 2, vmax: 1100, vmin: 160, vmaxm: 950, imax: 22, isc: 30, iac: 25.3, vac: 400, price: 1300 },
+  i20:  { name: 'Trifase 20 kW · 2 MPPT',  pac: 20,  mppt: 2,  inp: 2, vmax: 1100, vmin: 200, vmaxm: 1000, imax: 22, isc: 30, iac: 33.5, vac: 400, price: 1500 },
+  i30:  { name: 'Trifase 30 kW · 4 MPPT',  pac: 30,  mppt: 4,  inp: 2, vmax: 1100, vmin: 200, vmaxm: 1000, imax: 26, isc: 40, iac: 48.0, vac: 400, price: 1900 },
+  i50:  { name: 'Trifase 50 kW · 5 MPPT',  pac: 50,  mppt: 5,  inp: 2, vmax: 1100, vmin: 200, vmaxm: 1000, imax: 26, isc: 40, iac: 80.0, vac: 400, price: 2700 },
+  i100: { name: 'Trifase 100 kW · 10 MPPT', pac: 100, mppt: 10, inp: 2, vmax: 1100, vmin: 200, vmaxm: 1000, imax: 26, isc: 40, iac: 160.0, vac: 400, price: 4600 },
+  i150: { name: 'Trifase 150 kW · 14 MPPT', pac: 150, mppt: 14, inp: 2, vmax: 1100, vmin: 180, vmaxm: 1000, imax: 30, isc: 50, iac: 240.0, vac: 400, price: 6300 },
+  i215: { name: '1500 V 215 kW · 9 MPPT · uscita 800 V', pac: 215, mppt: 9, inp: 2, vmax: 1500, vmin: 500, vmaxm: 1500, imax: 30, isc: 50, iac: 155.2, vac: 800, price: 7500 }
+};
+
+/* ---------- Tipologie di copertura ---------- */
+const ROOF_TYPES = {
+  grecata: { name: 'Lamiera grecata / pannello sandwich · complanare', fill: 0.80, h: 0.28, ballast: 0, skg: 1.5, kit: 'minirail', mkt: [25, 15, 35] },
+  tegolo:  { name: 'Tegolo / shed prefabbricato in c.a.', fill: 0.70, h: 0.40, ballast: 0, skg: 4, kit: 'rail_bracket', mkt: [45, 35, 60] },
+  piana_s: { name: 'Piana con guaina · zavorrata Sud 10–15°', fill: 0.55, h: 0.45, ballast: 60, skg: 6, kit: 'ballast_s', mkt: [70, 55, 90] },
+  piana_eo:{ name: 'Piana con guaina · zavorrata Est-Ovest 10°', fill: 0.80, h: 0.38, ballast: 30, skg: 5, kit: 'ballast_eo', mkt: [50, 40, 65] },
+  tegole:  { name: 'Coppi / tegole in laterizio · ganci', fill: 0.75, h: 0.45, ballast: 0, skg: 3, kit: 'rail_hook', mkt: [50, 40, 65] },
+  amianto: { name: 'Fibrocemento (amianto) · bonifica + nuovo sandwich', fill: 0.80, h: 0.28, ballast: 0, skg: 1.5, kit: 'minirail', mkt: [25, 15, 35] }
+};
+
+/* ---------- Struttura di montaggio: valori di partenza (stime C&I 2026, da sostituire con offerta) ---------- */
+const ST_DEFAULTS = {
+  mode: 'dettaglio', bunit: 'kwp', bval: 0, bval_cp: 0, b_ballast: true,
+  clamp: 1.6, clamp_n: 2.4, minirail: 3.3, minirail_n: 2.2, screw: 0.30, screw_n: 8,
+  rail: 6.0, rail_n: 2, splice: 2.5, bracket: 4.5, bracket_n: 2, hook: 4.0, hook_n: 2.5,
+  kit_s: 26, kit_eo: 20, ballast: 0.09, prot: 2.0, steel: 2.4, cp_clamp: 8
+};
+
+/* ---------- Tabelle elettriche ---------- */
+// Portata cavo solare H1Z2Z2-K singolo in aria (EN 50618) – A
+const DC_IZ = { 4: 55, 6: 70, 10: 98 };
+const DC_PRICE = { 4: 0.99, 6: 1.35, 10: 2.20 };       // €/m (4 mm²: dal foglio Master)
+// Portata multipolare XLPE/EPR 90°C, posa in aria su passerella (IEC 60364-5-52 B.52.12, metodo E, 3 conduttori carichi) – A
+const AC_SECTIONS = [4, 6, 10, 16, 25, 35, 50, 70, 95, 120, 150, 185, 240];
+const AC_IZ = { 4: 42, 6: 54, 10: 75, 16: 100, 25: 127, 35: 158, 50: 192, 70: 246, 95: 298, 120: 346, 150: 399, 185: 456, 240: 538 };
+// Prezzo FG16OR16 quadripolare (€/m) — ipotesi 2026, scalabile con indice rame
+const AC_PRICE = { 4: 3.4, 6: 4.6, 10: 7.2, 16: 10.8, 25: 16.5, 35: 22.5, 50: 31, 70: 43, 95: 58, 120: 73, 150: 90, 185: 112, 240: 146 };
+const STD_IN = [16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250, 320, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3200];
+// Prezzo indicativo interruttore scatolato/modulare 4P con sganciatore (€) per In
+function breakerPrice(In) {
+  const t = [[32, 180], [63, 320], [125, 650], [250, 1300], [400, 2400], [630, 3800], [800, 5200], [1250, 8500], [1600, 11000], [2500, 16000], [3200, 21000]];
+  for (const [i, p] of t) if (In <= i) return p;
+  return 25000;
+}
+const TRAFO = [[250, 14000], [400, 17000], [630, 21000], [800, 25000], [1000, 29000], [1250, 34000], [1600, 41000], [2000, 49000], [2500, 58000], [3150, 68000]];
+
+const RHO20_DC = 0.0204;   // Ω·mm²/m, rame stagnato cl.5 (= 5,09 Ω/km per 4 mm²)
+const RHO20_AC = 0.0198;   // Ω·mm²/m, rame cl.5 FG16
+const ALPHA = 0.00393;
+const rhoT = (r20, T) => r20 * (1 + ALPHA * (T - 20));
+const fx = (v, n) => (+v).toFixed(n).replace('.', ',');
+const nextIn = (I) => { for (const v of STD_IN) if (v >= I) return v; return Math.ceil(I / 100) * 100; };
+const kTempXLPE = (Ta) => Math.sqrt(Math.max(0, (90 - Ta)) / 60);   // riferimento 30 °C
+
+/* ---------- Carico neve NTC 2018 §3.4 ---------- */
+function qsk(zone, as) {
+  const a = Math.max(0, as);
+  switch (zone) {
+    case 'I-A': return a <= 200 ? 1.50 : 1.39 * (1 + Math.pow(a / 728, 2));
+    case 'I-M': return a <= 200 ? 1.50 : 1.35 * (1 + Math.pow(a / 602, 2));
+    case 'II':  return a <= 200 ? 1.00 : 0.85 * (1 + Math.pow(a / 481, 2));
+    case 'III': return a <= 200 ? 0.60 : 0.51 * (1 + Math.pow(a / 481, 2));
+  }
+  return 1.5;
+}
+
+/* ---------- Prezzi unitari di default (tutti sovrascrivibili nel computo) ---------- */
+const PRICES = {
+  // moduli e ottimizzatori
+  opt: 43.4, opt_ctrl: 174.86,
+  // strutture tetto
+  ballast: 0.09, mat_prot: 2.0,
+  st_minirail: 3.3, st_rail: 6.0, st_clamp: 1.6, st_screw: 0.30, st_bracket: 4.5, st_hook: 4.0, st_splice: 2.5,
+  st_kit_s: 26, st_kit_eo: 20,
+  // strutture carport
+  steel: 2.4, clamps_cp: 8, sheet_cp: 18, gutter_cp: 35,
+  // inverter
+  bess: 330, bess_inst: 2500,
+  // cavi
+  mc4: 6.0, corr_dc: 0.6, tray_dc: 14, tray_ac: 28, equip: 1.4, data_cab: 1.6,
+  earth_rope: 6.5, earth_rod: 85,
+  // quadri
+  qpi_base: 600, qpi_feed: 140, spd_t2: 380, spd_t1t2: 950, spd_dc: 280,
+  spi_bt: 750, ddi: 650, link_qg: 300,
+  mt_adeg: 9500, cci: 12000, m2_mt: 2500, mt_cell: 15000,
+  vvf_base: 450, vvf_inv: 90, vvf_sign: 150,
+  // monitoraggio
+  logger: 1100, meter: 450, router: 250,
+  // opere edili / civili
+  asb_rem: 22, sandwich: 38, flashing: 25,
+  plinth_m3: 260, anchor_kit: 120, asphalt: 30, soil: 25, micropile_m: 90,
+  geo: 2500, trench: 55, pit: 220, led: 190, ev: 1700, bumper: 95, marking: 25,
+  // sicurezza
+  parap_ms: 23, parap_nolo: 2.0, scaf_ms: 24, scaf_nolo: 2.8, tower_ms: 1200, tower_nolo: 150,
+  skylight: 18, lifeline: 55, lifeline_doc: 600, fence: 18.5, fence_nolo: 1.1, site_hut: 450, dpi: 500,
+  // noli
+  crane: 950, hoist: 190, hoist_tr: 400, ple: 220, ple_tr: 300, telehandler: 260, excav: 480,
+  // progettazione e pratiche (minimi / €/kWp gestiti nel codice)
+  lightning: 500, edil: 800, dogane: 500, struct_cp_dep: 500, titolo_cp: 1500
+};
+
+function tica(PkW) {   // corrispettivo per l'ottenimento del preventivo (TICA, del. ARERA 99/08 e s.m.i.) €
+  if (PkW <= 6) return 30; if (PkW <= 10) return 50; if (PkW <= 50) return 100;
+  if (PkW <= 100) return 200; if (PkW <= 500) return 500; if (PkW <= 1000) return 1500; return 2500;
+}
+
+/* ---------- Scelta sezione AC ---------- */
+function pickAC(Ib, L, V, cosphi, k, dvMax, T) {
+  const In = nextIn(Ib);
+  const rho = rhoT(RHO20_AC, T);
+  let best = null;
+  for (let n = 1; n <= 8; n++) {
+    for (const S of AC_SECTIONS) {
+      const Iz = n * AC_IZ[S] * k;
+      if (Iz < In) continue;
+      const dv = Math.sqrt(3) * L * Ib * (rho / S) * cosphi / (n * V) * 100;
+      if (dv > dvMax) continue;
+      if (n > 1 && S < 50) continue;            // niente paralleli di piccole sezioni
+      const cost = n * AC_PRICE[S] * (1 + 0.1 * (n - 1)); // penalità posa/terminazioni per conduttori in parallelo
+      if (!best || cost < best.cost) best = { n, S, Iz, dv, In, cost };
+      break; // per un dato n la prima sezione valida è la minima
+    }
+  }
+  if (!best) { // nessuna soluzione entro ΔV: massima sezione in parallelo
+    const n = 8, S = 240; const dv = Math.sqrt(3) * L * Ib * (rhoT(RHO20_AC, T) / S) * cosphi / (n * V) * 100;
+    best = { n, S, Iz: n * AC_IZ[S] * k, dv, In, cost: n * AC_PRICE[S], fail: true };
+  }
+  return best;
+}
+
+/* ============================================================
+   CALCOLO
+   ============================================================ */
+function compute(S, mode, opts) {
+  const SITE = !!(opts && opts.site);   // in un sito: i costi comuni (connessione, pratiche, cantiere) li calcola computeSite
+  const d = {}, items = [], checks = [];
+  const ov = S.ov || {};
+  const add = (cat, id, desc, qty, um, unit, opt = {}) => {
+    if (!(qty > 0)) return;
+    const u = (!opt.field && ov[id] !== undefined && ov[id] !== '' && !isNaN(+ov[id])) ? +ov[id] : unit;
+    items.push({ cat, id, desc, qty, um, unit: u, def: unit, mat: !!opt.mat, ref: opt.ref || '', edited: u !== unit, field: opt.field || '' });
+  };
+  const chk = (lvl, title, detail, ref) => checks.push({ lvl, title, detail, ref: ref || '' });
+
+  /* ---- modulo ---- */
+  const M = S.mod; const Am = M.L * M.W; d.Am = Am;
+
+  /* ---- superficie / geometria ---- */
+  let Nmax, Aref;
+  if (mode === 'roof') {
+    const RT = ROOF_TYPES[S.roof_type] || ROOF_TYPES.grecata;
+    d.RT = RT;
+    d.fill = S.fill > 0 ? S.fill : RT.fill;
+    d.Autil = S.roof_area * d.fill;
+    Nmax = Math.floor(d.Autil / Am);
+    Aref = S.roof_area;
+  } else {
+    const wings = S.layout === 'doppia' ? 2 : 1;
+    const g = 0.02;
+    const fitN = (stalls) => {
+      const spw = S.layout === 'doppia' ? Math.ceil(stalls / 2) : stalls;
+      const Lr = spw * S.stall_w;
+      return wings * Math.max(Math.floor(S.cov_depth / (M.L + g)) * Math.floor(Lr / (M.W + g)), Math.floor(S.cov_depth / (M.W + g)) * Math.floor(Lr / (M.L + g)));
+    };
+    d.stalls = S.stalls;
+    if (!(S.stalls > 0)) {          // stalli calcolati dalla potenza obiettivo
+      const need = S.kwp_target > 0 ? Math.ceil(S.kwp_target * 1000 / M.p) : 0;
+      let n = wings; while (fitN(n) < need && n < 4000) n += wings;
+      d.stalls = need > 0 ? n : 0; d.stallsAuto = true;
+    }
+    const stalls = d.stalls;
+    const spw = S.layout === 'doppia' ? Math.ceil(stalls / 2) : stalls;
+    const Lrow = spw * S.stall_w;
+    const pa = Math.floor(S.cov_depth / (M.L + g)) * Math.floor(Lrow / (M.W + g));
+    const la = Math.floor(S.cov_depth / (M.W + g)) * Math.floor(Lrow / (M.L + g));
+    d.orient = pa >= la ? 'verticale' : 'orizzontale';
+    Nmax = wings * Math.max(pa, la);
+    d.wings = wings; d.spw = spw; d.Lrow = Lrow;
+    d.Acov = wings * Lrow * S.cov_depth;
+    d.ncolLine = Math.floor(Lrow / S.span) + 1;
+    d.ncol = d.ncolLine;               // mono: una fila di pilastri; doppia a T: fila centrale
+    d.qsk = qsk(S.snow_zone, S.altitude);
+    d.qs = 0.8 * d.qsk;                // μ1·qsk·CE·Ct, CE=Ct=1
+    Aref = d.Acov;
+  }
+  d.Nmax = Nmax;
+  let Ntarget = S.kwp_target > 0 ? Math.floor(S.kwp_target * 1000 / M.p) : Nmax;
+  if (Ntarget > Nmax) {
+    chk('err', 'Potenza obiettivo oltre lo spazio disponibile', `Servono ${Ntarget} moduli, ne entrano al massimo ${Nmax}. Il calcolo è limitato a ${Nmax}.`);
+    Ntarget = Nmax;
+  }
+
+  if (mode === 'roof') {
+    d.perimeter = S.perimeter > 0 ? S.perimeter : Math.round(4.24 * Math.sqrt(S.roof_area));   // pianta rettangolare 2:1
+    d.skylight = (typeof S.skylight_m2 === 'number') ? S.skylight_m2 : Math.round(0.05 * S.roof_area);
+    d.towers = S.towers > 0 ? S.towers : Math.max(1, Math.ceil(S.roof_area / 3000));
+  }
+  /* ---- dimensionamento stringhe (funzione di un inverter) ---- */
+  const sizeWith = (I) => {
+    const z = {};
+    const dTmin = S.t_min - 25, dTmax = S.t_max - 25;
+    z.VocTmin = M.voc * (1 + M.bvoc / 100 * dTmin);
+    z.VmpTmin = M.vmp * (1 + M.gp / 100 * dTmin);
+    z.VmpTmax = M.vmp * (1 + M.gp / 100 * dTmax);
+    z.Vsys = Math.min(I.vmax, M.vmax);
+    z.NsMaxV = Math.floor(z.Vsys / z.VocTmin);
+    z.NsMaxM = Math.floor(I.vmaxm / z.VmpTmin);
+    z.NsMin = Math.ceil(I.vmin / z.VmpTmax);
+    const nsTop = Math.min(z.NsMaxV, z.NsMaxM);
+    if (S.ns_override > 0) { z.Ns = S.ns_override; z.Nstr = Math.floor(Ntarget / z.Ns); }
+    else {
+      let best = null;
+      // stringa più lunga possibile, accorciata solo se avvicina meglio la potenza obiettivo
+      for (let ns = nsTop; ns >= Math.max(z.NsMin, 1); ns--) {
+        let nstr = Math.round(Ntarget / ns);
+        if (nstr * ns > Nmax) nstr = Math.floor(Nmax / ns);
+        if (nstr < 1) continue;
+        const score = Math.abs(nstr * ns - Ntarget) / Math.max(Ntarget, 1) * 100 + 0.5 * (nsTop - ns);  // scarto % vs accorciamento
+        if (!best || score < best.score) best = { ns, nstr, score };
+      }
+      z.Ns = best ? best.ns : Math.max(nsTop, 1);
+      z.Nstr = best ? best.nstr : 0;
+    }
+    z.Nmod = z.Nstr * z.Ns;
+    z.Pdc = z.Nmod * M.p / 1000;
+    z.sp = Math.min(I.inp, Math.floor(I.isc / M.isc));
+    const cap = I.mppt * Math.max(z.sp, 0);
+    const nRatio = Math.ceil(z.Pdc / (I.pac * S.dcac_max));
+    const nInp = cap > 0 ? Math.ceil(z.Nstr / cap) : Infinity;
+    z.Ninv = S.ninv_override > 0 ? S.ninv_override : Math.max(1, nRatio, nInp);
+    z.Pac = z.Ninv * I.pac;
+    z.ratio = z.Pac > 0 ? z.Pdc / z.Pac : 0;
+    z.strPerInvMax = z.Ninv > 0 ? Math.ceil(z.Nstr / z.Ninv) : 0;
+    z.npMppt = Math.ceil(z.strPerInvMax / I.mppt);
+    z.feasible = z.Nmod > 0 && z.NsMin <= nsTop && z.sp >= 1 && z.npMppt <= z.sp && isFinite(z.Ninv);
+    return z;
+  };
+
+  /* ---- scelta inverter: manuale o automatica in base alla potenza ---- */
+  let I = S.inv;
+  d.invAuto = S.inv_preset === 'auto';
+  if (d.invAuto) {
+    const allow800 = S.conn !== 'BT' && S.new_trafo;
+    let best = null;
+    for (const [key, cand] of Object.entries(INV_PRESETS)) {
+      if (cand.vac === 800 && !allow800) continue;
+      const z = sizeWith(cand);
+      if (!z.feasible) continue;
+      const inWindow = z.ratio >= 0.85 && z.ratio <= S.dcac_max + 1e-9;
+      // costo inverter + costo indicativo per partenza (interruttore, cablaggio, posa)
+      const clip = z.npMppt * M.imp > cand.imax;
+      const score = z.Ninv * (cand.price + 450 + 6 * cand.pac) * (clip ? 1.03 : 1) + (inWindow ? 0 : 1e7 + Math.abs(z.ratio - 1.1) * 1e6);
+      if (!best || score < best.score) best = { key, cand, score };
+    }
+    if (best) { I = best.cand; d.invKey = best.key; }
+  }
+  d.I = I;
+  Object.assign(d, sizeWith(I));
+  const Vsys = d.Vsys;
+  d.Amod = d.Nmod * Am;
+  d.VocStr = d.Ns * d.VocTmin;
+  d.VmpStrMin = d.Ns * d.VmpTmax;
+  d.VmpStrMax = d.Ns * d.VmpTmin;
+  d.VmpStr = d.Ns * M.vmp;
+
+  /* ---- connessione automatica ---- */
+  d.conn = (opts && opts.conn) || (S.conn === 'auto' ? (d.Pac > 100 ? 'MT' : 'BT') : S.conn);
+  if (!SITE && S.conn === 'auto') chk('info', `Connessione scelta: ${d.conn}`, d.conn === 'MT' ? 'Potenza AC oltre 100 kW.' : 'Potenza AC fino a 100 kW. Se lo stabilimento ha già una cabina MT, selezionala manualmente.', 'TICA ARERA');
+
+  if (d.Nmod === 0) chk('err', 'Nessun modulo installabile', 'Controlla superficie, dimensioni del modulo e configurazione stringhe.');
+  if (d.Ns > d.NsMaxV) chk('err', 'Tensione a vuoto di stringa troppo alta', `Voc a ${S.t_min} °C = ${fx(d.VocStr, 0)} V oltre il limite di ${Vsys} V (inverter/modulo). Massimo ${d.NsMaxV} moduli per stringa.`, 'CEI 64-8/7 sez. 712 · IEC 62548');
+  else chk('ok', 'Voc di stringa a Tmin', `${fx(d.VocStr, 0)} V ≤ ${Vsys} V`, 'CEI 64-8/7 sez. 712');
+  if (d.VmpStrMin < I.vmin) chk('err', 'Vmpp minima sotto la finestra MPPT', `A ${S.t_max} °C la stringa scende a ${fx(d.VmpStrMin, 0)} V, il minimo MPPT è ${I.vmin} V. Servono almeno ${d.NsMin} moduli per stringa.`);
+  else chk('ok', 'Vmpp a Tmax nella finestra MPPT', `${fx(d.VmpStrMin, 0)} V ≥ ${I.vmin} V`);
+  if (d.VmpStrMax > I.vmaxm) chk('warn', 'Vmpp a Tmin oltre la finestra MPPT', `${fx(d.VmpStrMax, 0)} V > ${I.vmaxm} V: possibile perdita di produzione con freddo intenso.`);
+  else chk('ok', 'Vmpp a Tmin nella finestra MPPT', `${fx(d.VmpStrMax, 0)} V ≤ ${I.vmaxm} V`);
+  if (d.sp < 1) chk('err', 'Corrente di cortocircuito oltre il limite MPPT', `Isc modulo ${M.isc} A > Isc ammessa ${I.isc} A per MPPT.`);
+  if (d.npMppt > d.sp) chk('err', 'Troppe stringhe per MPPT', `${d.npMppt} stringhe per MPPT, ammesse ${d.sp} (ingressi e Isc max). Aumenta il numero di inverter.`);
+  else if (d.npMppt * M.imp > I.imax) chk('warn', 'Corrente MPPT oltre la massima di funzionamento', `${fx((d.npMppt * M.imp), 1)} A > ${I.imax} A: l'inverter limita la corrente (clipping) nelle ore di picco. Ammesso da molti costruttori, verificare datasheet.`);
+  else chk('ok', 'Corrente per MPPT', `${fx((d.npMppt * M.imp), 1)} A ≤ ${I.imax} A`);
+  if (d.ratio > 1.35) chk('warn', 'Rapporto DC/AC elevato', `${fx(d.ratio, 2)}: perdite per clipping significative.`);
+  else if (d.ratio < 0.95) chk('warn', 'Inverter sovradimensionato', `Rapporto DC/AC ${fx(d.ratio, 2)}.`);
+  else chk('ok', 'Rapporto DC/AC', fx(d.ratio, 2));
+  if (d.Nmod !== Ntarget) chk('info', 'Moduli arrotondati alle stringhe', `${Math.abs(Ntarget - d.Nmod)} moduli ${d.Nmod < Ntarget ? 'in meno' : 'in più'} rispetto all'obiettivo, per avere stringhe complete da ${d.Ns}.`);
+
+  // protezione di stringa (IEC 62548 / CEI 64-8/7 712.433)
+  d.fuses = d.npMppt >= 3 && (d.npMppt - 1) * 1.25 * M.isc > M.fuse;
+  if (d.fuses) chk('warn', 'Servono fusibili di stringa', `(${d.npMppt}−1)·1,25·Isc = ${fx(((d.npMppt - 1) * 1.25 * M.isc), 1)} A > corrente inversa ammessa ${M.fuse} A.`, 'IEC 62548 · CEI 64-8/7 712.433');
+  else chk('ok', 'Fusibili di stringa non necessari', `Massimo ${d.npMppt} ${d.npMppt === 1 ? 'stringa' : 'stringhe in parallelo'} per MPPT.`, 'IEC 62548');
+
+  /* ---- cavi DC ---- */
+  const rDC = rhoT(RHO20_DC, S.t_cab_dc);
+  const kDC = 0.91 * 0.9 * S.k_group_dc;
+  const Ireq = Math.max(1.25 * M.isc, (d.npMppt - 1) * 1.25 * M.isc);
+  let dcS = null;
+  for (const s of [4, 6, 10]) {
+    const iz = DC_IZ[s] * kDC;
+    const dv = 2 * S.l_dc * M.imp * rDC / s / d.VmpStr * 100;
+    if (iz >= Ireq && dv <= S.dv_dc_max) { dcS = { S: s, iz, dv }; break; }
+  }
+  if (!dcS) { const s = 10; dcS = { S: s, iz: DC_IZ[s] * kDC, dv: 2 * S.l_dc * M.imp * rDC / s / d.VmpStr * 100, fail: true }; }
+  d.dc = dcS;
+  if (dcS.fail) chk('warn', 'Caduta di tensione DC oltre il limite', `Anche con 10 mm² la caduta è ${fx(dcS.dv, 2)}% (limite ${S.dv_dc_max}%). Avvicina gli inverter al campo.`, 'CEI 82-25');
+  else chk('ok', `Cavo DC ${dcS.S} mm²`, `ΔV ${fx(dcS.dv, 2)}% · Iz ${fx(dcS.iz, 1)} A ≥ ${fx(Ireq, 1)} A`, 'CEI 82-25 · EN 50618');
+  d.mDC = d.Nstr * (2 * S.l_dc + S.l_extra) * 1.05;
+
+  /* ---- cavi AC ---- */
+  const kAC = kTempXLPE(S.t_amb) * S.k_group_ac;
+  d.ac1 = pickAC(I.iac, S.l_ac1, I.vac, 0.99, kAC, S.dv_ac_max, 70);
+  // oltre ~1600 A su un'unica linea BT si suddivide in più sezioni (QPI + linea + trafo/QBT dedicato)
+  d.nSec = Math.max(1, Math.ceil(d.Ninv * I.iac / 1450));
+  d.invPerSec = Math.ceil(d.Ninv / d.nSec);
+  d.Ib2 = d.invPerSec * I.iac;
+  d.ac2 = pickAC(d.Ib2, S.l_ac2, I.vac, 0.99, mode === 'carport' ? kAC * 0.85 : kAC, S.dv_ac_max, 70);
+  d.dvTot = d.dc.dv + d.ac1.dv + d.ac2.dv;
+  if (d.nSec > 1) chk(d.conn === 'MT' && !S.new_trafo ? 'warn' : 'info', `Impianto suddiviso in ${d.nSec} sezioni BT`, `Ogni sezione raccoglie ${d.invPerSec} inverter su un proprio quadro e linea (Ib ${fx(d.Ib2, 0)} A). ${d.conn === 'MT' && !S.new_trafo ? 'Verificare che la cabina abbia trasformatori/QBT sufficienti o selezionare trasformatori dedicati.' : ''}`);
+  for (const [k, lab] of [['ac1', 'inverter → quadro di parallelo'], ['ac2', 'quadro di parallelo → punto di connessione']]) {
+    const c = d[k];
+    if (c.fail) chk('warn', `Cavo AC ${lab}: ΔV oltre limite`, `${fx(c.dv, 2)}% con ${c.n}×${c.S} mm²`);
+    else chk('ok', `Cavo AC ${lab}`, `${c.n > 1 ? c.n + '× ' : ''}FG16OR16 4×${c.S} mm² · In ${c.In} A · Iz ${fx(c.Iz, 0)} A · ΔV ${fx(c.dv, 2)}%`, 'CEI 64-8 · IEC 60364-5-52');
+  }
+  if (d.dvTot > 3) chk('warn', 'Caduta di tensione complessiva', `${fx(d.dvTot, 2)}% (DC + AC) oltre il 3% consigliato.`, 'CEI 82-25');
+  else chk('ok', 'Caduta di tensione complessiva', `${fx(d.dvTot, 2)}%`, 'CEI 82-25');
+
+  /* ---- connessione ---- */
+  const PacTot = d.Pac;
+  if (SITE) { if (I.vac !== 400 && !(d.conn === 'MT' && S.new_trafo)) chk('err', 'Inverter con uscita 800 V', 'Serve una connessione MT con trasformatore dedicato (Dati comuni del sito).'); }
+  else if (d.conn === 'BT') {
+    if (PacTot > 100) chk('err', 'Potenza oltre il limite di connessione in BT', `${PacTot} kW > 100 kW: per il TICA la connessione è di norma in MT (CEI 0-16).`, 'TICA ARERA · CEI 0-21');
+    if (I.vac !== 400) chk('err', 'Inverter con uscita 800 V su connessione BT', 'Serve un trasformatore dedicato e una connessione MT.');
+    d.icc = PacTot <= 33 ? 10 : 15;
+    chk('info', 'Potere di interruzione minimo', `Icc convenzionale di rete ${d.icc} kA per BT trifase ${PacTot <= 33 ? '≤' : '>'} 33 kW.`, 'CEI 0-21');
+    if (PacTot > 11.08) chk('info', 'SPI esterno obbligatorio', 'Oltre 11,08 kW il sistema di protezione di interfaccia deve essere esterno all\'inverter' + (PacTot > 20 ? '; oltre 20 kW serve anche il dispositivo di rincalzo.' : '.'), 'CEI 0-21');
+  } else {
+    if (I.vac !== 400 && !S.new_trafo) chk('err', 'Inverter con uscita 800 V', 'Seleziona "nuovo trasformatore dedicato": la tensione 800 V non è compatibile con la rete BT di stabilimento.');
+    if (PacTot >= 100) chk('info', 'Controllore Centrale d\'Impianto (CCI)', 'Per impianti di produzione connessi in MT con potenza ≥ 100 kW il CCI è richiesto.', 'CEI 0-16 All. O · del. ARERA 540/2021');
+    chk('info', 'Verifica capacità cabina', 'Controllare taglia del trasformatore esistente, protezione generale (PG) e regolamento di esercizio.', 'CEI 0-16');
+  }
+
+  /* ---- verifiche strutturali indicative ---- */
+  if (mode === 'roof') {
+    const RT = d.RT;
+    d.ballastKg = (typeof S.ballast_kg === 'number' && S.ballast_kg >= 0) ? S.ballast_kg : RT.ballast;
+    d.loadKgm2 = (M.kg + RT.skg + d.ballastKg) / Am;
+    if (d.loadKgm2 > S.roof_capacity) chk('err', 'Carico in copertura oltre la portata residua', `${fx(d.loadKgm2, 1)} kg/m² > ${S.roof_capacity} kg/m² dichiarati. Serve verifica strutturale prima di procedere.`, 'NTC 2018 cap. 8');
+    else chk('ok', 'Carico permanente aggiunto', `${fx(d.loadKgm2, 1)} kg/m² ≤ ${S.roof_capacity} kg/m² (da confermare con verifica strutturale).`, 'NTC 2018 cap. 8');
+    if (d.ballastKg > 0) chk('info', 'Zavorre da verificare al vento', 'Il peso per modulo è un valore indicativo: va calcolato con la pressione del vento di sito.', 'NTC 2018 §3.3 · EN 1991-1-4');
+    chk('info', 'Prevenzione incendi', 'Fascia di rispetto da elementi di aerazione/compartimentazione e copertura classe B<sub>ROOF</sub> o EI 30. Pulsante di sgancio segnalato.', 'Nota DCPREV 1324/2012 e chiarimenti');
+  } else {
+    chk('info', 'Carico neve di progetto', `Zona ${S.snow_zone}, ${S.altitude} m s.l.m.: qsk = ${fx(d.qsk, 2)} kN/m², qs = ${fx(d.qs, 2)} kN/m² (μ1 = 0,8).`, 'NTC 2018 §3.4');
+    chk('info', 'Opera strutturale soggetta a deposito e collaudo', 'Progetto strutturale, deposito al Genio civile e collaudo statico.', 'DPR 380/2001 artt. 65 e 67 · NTC 2018 cap. 9');
+  }
+
+  /* ============================================================
+     COMPUTO
+     ============================================================ */
+  const C = {
+    MOD: 'Moduli e ottimizzatori', STR: 'Strutture di supporto', INV: 'Inverter e accumulo',
+    CAB: 'Cavi, connettori e vie cavi', QE: 'Quadri, protezioni e connessione', MON: 'Monitoraggio',
+    CIV: mode === 'roof' ? 'Opere edili in copertura' : 'Opere civili e fondazioni',
+    SIC: 'Sicurezza (D.Lgs. 81/08)', NOL: 'Noli e sollevamenti', MDO: 'Manodopera e trasferte',
+    PRO: 'Progettazione, pratiche e connessione'
+  };
+  d.C = C;
+  const P = PRICES;
+
+  // Moduli
+  add(C.MOD, 'mod', `Modulo FV ${M.name} · ${M.p} Wp`, d.Nmod, 'pz', M.price, { mat: true });
+  d.Nopt = Math.round(d.Nmod * S.opt_pct / 100);
+  add(C.MOD, 'opt', 'Ottimizzatore di potenza (uno per modulo selezionato)', d.Nopt, 'pz', P.opt, { mat: true });
+  add(C.MOD, 'opt_ctrl', 'Centralina/gateway gestione ottimizzatori', d.Nopt > 0 ? d.Ninv : 0, 'pz', P.opt_ctrl, { mat: true });
+
+  // Strutture — a budget (voce unica) o scomposta per componenti; prezzi e coefficienti dalla sezione "Struttura di montaggio"
+  const T = Object.assign({}, ST_DEFAULTS, S.st || {});
+  d.st = T;
+  const F = (f) => ({ mat: true, field: 'st.' + f });
+  if (mode === 'roof') {
+    const RT = d.RT;
+    const N = d.Nmod, railM = Math.round(N * T.rail_n * (M.W + 0.02));
+    d.ballastT = d.Nmod * d.ballastKg / 1000;
+    // budget automatico: riferimento di mercato €/kWp (fornitura, posa esclusa) corretto per taglia
+    const sizeK = d.Pdc < 100 ? Math.min(1.3, Math.pow(100 / Math.max(d.Pdc, 1), 0.12)) : d.Pdc > 1000 ? 0.92 : 1;
+    const ballastKwp = d.ballastKg > 0 ? (d.ballastKg * T.ballast + 2 * T.prot) / (M.p / 1000) : 0;
+    const mk = RT.mkt || [40, 30, 55];
+    const autoKwp = (mk[0] - (T.b_ballast ? 0 : ballastKwp)) * sizeK;
+    const toUnit = (vk) => T.bunit === 'mod' ? vk * M.p / 1000 : T.bunit === 'corpo' ? vk * d.Pdc : vk;
+    d.stAuto = { kwp: autoKwp, lo: (mk[1] - (T.b_ballast ? 0 : ballastKwp)) * sizeK, hi: (mk[2] - (T.b_ballast ? 0 : ballastKwp)) * sizeK, unit: toUnit(autoKwp), sizeK };
+    if (T.mode === 'budget') {
+      const lab = { kwp: '€/kWp', mod: '€/modulo', corpo: 'a corpo' }[T.bunit] || '€/kWp';
+      const q = T.bunit === 'mod' ? N : T.bunit === 'corpo' ? 1 : +d.Pdc.toFixed(2);
+      const val = T.bval > 0 ? T.bval : +d.stAuto.unit.toFixed(T.bunit === 'corpo' ? 0 : 2);
+      add(C.STR, 'st_budget', `Struttura di montaggio a budget (${lab}${T.b_ballast && d.ballastKg > 0 ? ', zavorre comprese' : ''}${T.bval > 0 ? '' : ', stima di mercato'}) · ${RT.name}`, q, T.bunit === 'mod' ? 'pz mod' : T.bunit === 'corpo' ? 'a corpo' : 'kWp', val, F('bval'));
+    } else {
+      add(C.STR, 'st_clamp', 'Morsetti centrali e terminali in alluminio (per altezza cornice del modulo)', Math.round(N * T.clamp_n), 'pz', T.clamp, F('clamp'));
+      if (RT.kit === 'minirail') {
+        add(C.STR, 'st_minirail', 'Profili mini-rail in alluminio per lamiera grecata / sandwich', Math.round(N * T.minirail_n), 'pz', T.minirail, F('minirail'));
+        add(C.STR, 'st_screw', 'Viti autoforanti inox con guarnizione EPDM', Math.round(N * T.screw_n), 'pz', T.screw, F('screw'));
+      } else if (RT.kit === 'rail_bracket' || RT.kit === 'rail_hook') {
+        add(C.STR, 'st_rail', `Binari in alluminio estruso (${T.rail_n} per fila di moduli)`, railM, 'm', T.rail, F('rail'));
+        add(C.STR, 'st_splice', 'Giunti di continuità per binari (barre da 6 m)', Math.ceil(railM / 6), 'pz', T.splice, F('splice'));
+        if (RT.kit === 'rail_bracket') add(C.STR, 'st_bracket', 'Staffe di ancoraggio su travi in c.a. con tasselli', Math.round(N * T.bracket_n), 'pz', T.bracket, F('bracket'));
+        else add(C.STR, 'st_hook', 'Ganci inox regolabili per coppi/tegole', Math.round(N * T.hook_n), 'pz', T.hook, F('hook'));
+      } else if (RT.kit === 'ballast_s') {
+        add(C.STR, 'st_kit_s', 'Supporto zavorrato aerodinamico Sud 10–15° (basi, profili, controventi)', N, 'pz mod', T.kit_s, F('kit_s'));
+      } else {
+        add(C.STR, 'st_kit_eo', 'Supporto zavorrato Est-Ovest 10° (basi, profili, controventi)', N, 'pz mod', T.kit_eo, F('kit_eo'));
+      }
+    }
+    if (!(T.mode === 'budget' && T.b_ballast)) {
+      add(C.STR, 'ballast', 'Zavorre in cls (peso indicativo da verificare al vento)', Math.round(d.Nmod * d.ballastKg), 'kg', T.ballast, Object.assign(F('ballast'), { ref: 'NTC 2018 §3.3' }));
+      if (d.ballastKg > 0) add(C.STR, 'mat_prot', 'Tappetini di protezione guaina sotto zavorre', d.Nmod * 2, 'pz', T.prot, F('prot'));
+    }
+  } else {
+    d.steelKgm2 = S.steel_kgm2 > 0 ? S.steel_kgm2 : (10 + 9 * d.qs) * (S.layout === 'doppia' ? 1.0 : 1.15);
+    d.steelKg = d.steelKgm2 * d.Acov;
+    d.steelT = d.steelKg / 1000;
+    // budget automatico pensilina: 300 €/kWp (fornitura carpenteria + fissaggi, posa e fondazioni escluse) corretto per neve e taglia
+    const sizeK = d.Pdc < 200 ? Math.min(1.5, Math.pow(200 / Math.max(d.Pdc, 1), 0.15)) : d.Pdc > 1000 ? 0.92 : 1;
+    const snowK = Math.sqrt(Math.max(d.qs, 0.5) / 1.2);
+    const autoKwp = 300 * snowK * sizeK;
+    const toUnit = (vk) => T.bunit === 'mod' ? vk * M.p / 1000 : T.bunit === 'corpo' ? vk * d.Pdc : T.bunit === 'm2' ? vk * d.Pdc / Math.max(d.Acov, 1) : vk;
+    d.stAuto = { kwp: autoKwp, lo: 230 * snowK * sizeK, hi: 400 * snowK * sizeK, unit: toUnit(autoKwp), sizeK, snowK };
+    if (T.mode === 'budget') {
+      const lab = { kwp: '€/kWp', m2: '€/m² coperto', mod: '€/modulo', corpo: 'a corpo' }[T.bunit] || '€/kWp';
+      const q = T.bunit === 'm2' ? Math.round(d.Acov) : T.bunit === 'mod' ? d.Nmod : T.bunit === 'corpo' ? 1 : +d.Pdc.toFixed(2);
+      const val = T.bval_cp > 0 ? T.bval_cp : +d.stAuto.unit.toFixed(T.bunit === 'corpo' ? 0 : 2);
+      add(C.STR, 'st_budget', `Struttura pensilina a budget (${lab}${T.bval_cp > 0 ? '' : ', stima di mercato'}: carpenteria e fissaggi moduli, fondazioni escluse)`, q, T.bunit === 'm2' ? 'm²' : T.bunit === 'mod' ? 'pz mod' : T.bunit === 'corpo' ? 'a corpo' : 'kWp', val, F('bval_cp'));
+    } else {
+      add(C.STR, 'steel', `Carpenteria metallica S275/S355 zincata a caldo (${fx(d.steelKgm2, 1)} kg/m² coperto)`, Math.round(d.steelKg), 'kg', T.steel, Object.assign(F('steel'), { ref: 'NTC 2018 cap. 4.2' }));
+      add(C.STR, 'clamps_cp', 'Profili e morsetti di fissaggio moduli su arcarecci', d.Nmod, 'pz mod', T.cp_clamp, F('cp_clamp'));
+    }
+    if (S.cover === 'lamiera') add(C.STR, 'sheet_cp', 'Lamiera grecata sottomodulo (tenuta all\'acqua)', Math.round(d.Acov), 'm²', P.sheet_cp, { mat: true });
+    if (S.gutters) add(C.STR, 'gutter_cp', 'Canale di gronda e pluviali', Math.round(d.Lrow * d.wings + d.ncol * 3), 'm', P.gutter_cp, { mat: true });
+  }
+
+  // Inverter
+  add(C.INV, 'inv', `Inverter ${I.name}`, d.Ninv, 'pz', I.price, { mat: true });
+  if (!SITE && S.bess_kwh > 0) {
+    add(C.INV, 'bess', 'Sistema di accumulo C&I (batterie + PCS + BMS)', S.bess_kwh, 'kWh', P.bess, { mat: true, ref: 'CEI 0-16/0-21 All. accumuli' });
+    add(C.INV, 'bess_inst', 'Installazione, cablaggio e messa in servizio accumulo', 1, 'a corpo', P.bess_inst + 8 * S.bess_kwh);
+  }
+
+  // Cavi
+  add(C.CAB, `dc_cab`, `Cavo solare H1Z2Z2-K 1×${d.dc.S} mm² (rosso + nero, sfrido 5%)`, Math.round(d.mDC), 'm', DC_PRICE[d.dc.S], { mat: true, ref: 'EN 50618' });
+  add(C.CAB, 'mc4', 'Connettori MC4 compatibili (coppie M+F, 3 per stringa)', d.Nstr * 3, 'coppie', P.mc4, { mat: true });
+  add(C.CAB, 'corr_dc', 'Guaina/corrugato per calate e attraversamenti DC', d.Nstr * 6, 'm', P.corr_dc, { mat: true });
+  const ci = S.cable_index;
+  d.mAC1 = d.Ninv * S.l_ac1 * d.ac1.n * 1.05;
+  d.mAC2 = d.nSec * S.l_ac2 * d.ac2.n * 1.05;
+  add(C.CAB, 'ac1', `Cavo FG16OR16 4×${d.ac1.S} mm² inverter → quadro parallelo${d.ac1.n > 1 ? ` (${d.ac1.n} in parallelo)` : ''}`, Math.round(d.mAC1), 'm', +(AC_PRICE[d.ac1.S] * ci).toFixed(2), { mat: true });
+  add(C.CAB, 'ac2', `Cavo FG16OR16 4×${d.ac2.S} mm² quadro parallelo → connessione${d.ac2.n > 1 ? ` (${d.ac2.n} in parallelo)` : ''}`, Math.round(d.mAC2), 'm', +(AC_PRICE[d.ac2.S] * ci).toFixed(2), { mat: true });
+  d.trayDC = S.tray_dc > 0 ? S.tray_dc : Math.round(d.Ninv * S.l_dc);
+  d.trayAC = S.tray_ac > 0 ? S.tray_ac : Math.round(d.Ninv * S.l_ac1 + (mode === 'roof' ? S.l_ac2 : 0));
+  add(C.CAB, 'tray_dc', 'Passerella metallica con coperchio per dorsali DC (protezione UV e meccanica)', d.trayDC, 'm', P.tray_dc, { mat: true });
+  add(C.CAB, 'tray_ac', 'Passerella metallica portacavi AC', d.trayAC, 'm', P.tray_ac, { mat: true });
+  if (mode === 'roof' && S.equip) add(C.CAB, 'equip', 'Conduttore equipotenziale strutture/telai 16 mm² + capicorda', Math.round(d.Nmod * 0.6), 'm', P.equip, { mat: true, ref: 'CEI 64-8/7 712.54' });
+  if (mode === 'carport') {
+    add(C.CAB, 'earth_rope', 'Corda di rame nudo 35 mm² per impianto di terra struttura', Math.round(d.Lrow * d.wings + S.l_ac2), 'm', P.earth_rope, { mat: true, ref: 'CEI 64-8 sez. 54' });
+    add(C.CAB, 'earth_rod', 'Dispersore a picchetto con pozzetto', Math.ceil(d.ncol / 3), 'pz', P.earth_rod, { mat: true });
+  }
+  add(C.CAB, 'data_cab', 'Cavo dati FTP Cat.5e/RS485 per monitoraggio', Math.round(d.Ninv * S.l_ac1 + S.l_ac2), 'm', P.data_cab, { mat: true });
+
+  // Quadri e connessione
+  const k800 = I.vac === 800 ? 1.3 : 1.0;
+  add(C.QE, 'qpi', `Quadro di parallelo inverter · carpenteria e cablaggio (${d.nSec > 1 ? d.nSec + ' quadri, ' : ''}${d.Ninv} partenze)`, 1, 'a corpo', Math.round((P.qpi_base * d.nSec + P.qpi_feed * d.Ninv) * k800), { mat: true });
+  add(C.QE, 'brk_inv', `Interruttore magnetotermico 4P In ${d.ac1.In} A per linea inverter`, d.Ninv, 'pz', Math.round(breakerPrice(d.ac1.In) * k800), { mat: true });
+  add(C.QE, 'brk_gen', `Interruttore generale ${d.nSec > 1 ? 'di sezione' : 'impianto FV'} 4P In ${d.ac2.In} A`, d.nSec, 'pz', Math.round(breakerPrice(d.ac2.In) * k800), { mat: true });
+  add(C.QE, 'spd_ac', S.lps ? 'SPD lato AC tipo 1+2 (struttura con LPS)' : 'SPD lato AC tipo 2', d.nSec, 'pz', S.lps ? P.spd_t1t2 : P.spd_t2, { mat: true, ref: 'CEI EN 62305 · CEI EN 61643-11' });
+  if (S.lps) add(C.QE, 'spd_dc', 'SPD lato DC tipo 1+2 aggiuntivi (per inverter)', d.Ninv, 'pz', P.spd_dc, { mat: true, ref: 'CEI EN 61643-31' });
+  if (d.fuses) add(C.QE, 'fuse_box', 'Quadro di campo DC con fusibili gPV (per inverter)', d.Ninv, 'pz', 350 + 30 * d.strPerInvMax, { mat: true, ref: 'IEC 62548' });
+  if (SITE) { /* SPI, DDI, rincalzo, cabina MT e CCI: calcolati a livello di sito */ }
+  else if (d.conn === 'BT') {
+    if (PacTot > 11.08) {
+      add(C.QE, 'spi', 'Sistema di protezione di interfaccia (SPI) esterno certificato', 1, 'pz', P.spi_bt, { mat: true, ref: 'CEI 0-21' });
+      add(C.QE, 'ddi', 'Dispositivo di interfaccia: bobina di minima + comando motore', 1, 'pz', P.ddi, { mat: true, ref: 'CEI 0-21' });
+    }
+    if (PacTot > 20) add(C.QE, 'ddr', `Dispositivo di rincalzo (interruttore 4P In ${d.ac2.In} A con bobina)`, 1, 'pz', breakerPrice(d.ac2.In), { mat: true, ref: 'CEI 0-21' });
+  } else {
+    add(C.QE, 'mt_adeg', 'Adeguamento cabina MT: SPI con TV/TO, aggiornamento PG, prove relè', 1, 'a corpo', P.mt_adeg, { ref: 'CEI 0-16' });
+    const cciOn = S.cci === 'si' || (S.cci === 'auto' && PacTot >= 100);
+    if (cciOn) add(C.QE, 'cci', 'Controllore Centrale d\'Impianto (CCI) con configurazione', 1, 'pz', P.cci, { ref: 'CEI 0-16 All. O' });
+    add(C.QE, 'm2', 'Sistema di misura dell\'energia prodotta (M2) con TA', 1, 'a corpo', P.m2_mt);
+    if (S.new_trafo) {
+      const kva = PacTot * 1.1 / d.nSec;
+      const t = TRAFO.find(r => r[0] >= kva) || TRAFO[TRAFO.length - 1];
+      d.trafoKva = t[0];
+      add(C.QE, 'trafo', `Trasformatore MT/BT in resina ${t[0]} kVA (Ecodesign UE 2019/1783)`, d.nSec, 'pz', t[1], { mat: true });
+      add(C.QE, 'mt_cell', 'Scomparto MT di protezione trasformatore + collegamenti', d.nSec, 'pz', P.mt_cell, { mat: true });
+    }
+  }
+  add(C.QE, 'link_qg', 'Collegamento al quadro generale / QBT cabina (barre, capicorda, morsetti)', d.nSec, 'a corpo', P.link_qg + Math.round(d.ac2.n * 60), { mat: true });
+  if (S.vvf) {
+    add(C.QE, 'vvf', 'Comando di sgancio di emergenza (pulsante, bobine, cablaggio)', 1, 'a corpo', P.vvf_base + P.vvf_inv * d.Ninv, { mat: true, ref: 'Nota DCPREV 1324/2012' });
+    add(C.QE, 'vvf_sign', 'Cartellonistica di sicurezza FV (UNI EN ISO 7010)', 1, 'a corpo', P.vvf_sign, { mat: true });
+  }
+
+  // Monitoraggio
+  if (!SITE && S.monitor) {
+    add(C.MON, 'logger', 'Datalogger di impianto (fino a 80 inverter)', Math.max(1, Math.ceil(d.Ninv / 80)), 'pz', P.logger, { mat: true });
+    add(C.MON, 'meter', 'Power meter trifase con TA per gestione e controllo immissione', 1, 'pz', P.meter, { mat: true });
+    add(C.MON, 'router', 'Router 4G industriale', 1, 'pz', P.router, { mat: true });
+  }
+
+  /* ---- Opere civili / edili ---- */
+  if (mode === 'roof' && S.roof_type === 'amianto') {
+    const m2 = S.asb_m2 > 0 ? S.asb_m2 : S.roof_area;
+    add(C.CIV, 'asb_rem', 'Bonifica amianto: rimozione, confezionamento, trasporto e smaltimento (ditta iscritta cat. 10)', m2, 'm²', P.asb_rem, { ref: 'D.Lgs. 81/08 Tit. IX · DM 06/09/1994' });
+    add(C.CIV, 'sandwich', 'Nuova copertura in pannello sandwich coibentato (fornitura e posa)', m2, 'm²', P.sandwich);
+    add(C.CIV, 'flashing', 'Lattonerie di colmo, gronda e scossaline', d.perimeter, 'm', P.flashing);
+  }
+  if (mode === 'carport') {
+    d.plinthM3 = S.plinth_m3 > 0 ? S.plinth_m3 : (S.layout === 'doppia' ? 2.4 : 3.0) * Math.pow(d.qs / 1.2, 0.7) * (S.span / 5);
+    if (S.found === 'plinto') {
+      add(C.CIV, 'plinth', `Plinto in c.a. C25/30 (scavo, armatura B450C, casseri, getto, rinterro) · ${fx(d.plinthM3, 2)} m³/plinto`, +(d.plinthM3 * d.ncol).toFixed(1), 'm³', P.plinth_m3, { ref: 'NTC 2018 cap. 6' });
+      add(C.CIV, 'soil', 'Trasporto e conferimento terre di scavo', +(d.plinthM3 * d.ncol * 1.25).toFixed(1), 'm³', P.soil, { ref: 'DPR 120/2017' });
+    } else {
+      add(C.CIV, 'micropile', 'Micropali Ø 200 mm (2 per pilastro, L 6 m) con cordolo di testa', d.ncol * 12, 'm', P.micropile_m, { ref: 'NTC 2018 §6.4' });
+    }
+    add(C.CIV, 'anchor_kit', 'Tirafondi, piastre di base e inghisaggi', d.ncol, 'pz', P.anchor_kit, { mat: true });
+    add(C.CIV, 'asphalt', 'Taglio, demolizione e ripristino pavimentazione bituminosa', d.ncol * 8 + Math.round(S.trench_m * 0.6), 'm²', P.asphalt);
+    add(C.CIV, 'geo', 'Indagine e relazione geologica-geotecnica', 1, 'a corpo', P.geo, { ref: 'NTC 2018 §6.2.2' });
+    add(C.CIV, 'trench', 'Cavidotto interrato (scavo, 2 corrugati Ø125, nastro segnalatore, rinterro)', S.trench_m, 'm', P.trench);
+    add(C.CIV, 'pit', 'Pozzetti di ispezione con chiusino carrabile D400', S.trench_m > 0 ? Math.ceil(S.trench_m / 25) + 1 : 0, 'pz', P.pit);
+    add(C.CIV, 'bumper', 'Paracolpi di protezione pilastri', d.ncol, 'pz', P.bumper, { mat: true });
+    add(C.CIV, 'marking', 'Ripristino segnaletica orizzontale stalli', d.stalls, 'stallo', P.marking);
+    if (S.led) add(C.CIV, 'led', 'Illuminazione LED sotto pensilina IP66 (1 ogni 2 stalli, cablata)', Math.ceil(d.stalls / 2), 'pz', P.led, { mat: true, ref: 'UNI EN 12464-2' });
+    if (S.ev_n > 0) add(C.CIV, 'ev', 'Punto di ricarica EV 22 kW con linea dedicata e protezioni', S.ev_n, 'pz', P.ev, { mat: true, ref: 'CEI 64-8 sez. 722' });
+  }
+
+  /* ---- Manodopera (ore) ---- */
+  const H = {};
+  if (mode === 'roof') {
+    H.mod = d.Nmod * d.RT.h;
+    H.ballast = (d.ballastT || 0) * 1.5;
+  } else {
+    H.mod = d.Nmod * 0.30;
+    H.sheet = S.cover === 'lamiera' ? d.Acov * 0.15 : 0;
+    H.led = S.led ? Math.ceil(d.stalls / 2) * 1.5 : 0;
+  }
+  H.opt = d.Nopt * 0.08;
+  H.strings = d.Nstr * 1.2;
+  H.trays = d.trayDC * 0.15 + d.trayAC * 0.25;
+  H.ac = (d.mAC1 * (0.06 + 0.002 * d.ac1.S)) + (d.mAC2 * (0.06 + 0.002 * d.ac2.S));
+  H.inv = d.Ninv * (3 + 0.03 * I.pac);
+  H.qe = 12 + 3 * d.Ninv + (!SITE && d.conn === 'MT' ? 24 : 0);
+  H.mon = !SITE && S.monitor ? 6 + 0.5 * d.Ninv : 0;
+  H.test = 8 + 0.3 * d.Nstr;
+  H.equip = (mode === 'roof' && S.equip) ? d.Nmod * 0.6 * 0.03 : 0;
+  H.bess = S.bess_kwh > 0 ? 0 : 0; // compresa nella voce a corpo
+  d.H = H;
+  d.hTot = Object.values(H).reduce((a, b) => a + b, 0);
+  d.hSteel = mode === 'carport' ? d.steelT * 12 : 0;
+  const crewH = S.team * S.h_day;
+  d.days = Math.max(1, Math.ceil(d.hTot / crewH)) + (mode === 'carport' ? Math.ceil(d.hSteel / (S.team * S.h_day)) : 0);
+  d.daysCivil = mode === 'carport' ? Math.ceil(d.ncol / 6) + 2 : 0;
+  d.daysTot = d.days + d.daysCivil + (mode === 'roof' && S.roof_type === 'amianto' ? Math.ceil((S.asb_m2 > 0 ? S.asb_m2 : S.roof_area) / 250) : 0);
+  d.months = Math.max(1, Math.ceil(d.daysTot / 21));
+
+  add(C.MDO, 'mdo_mod', 'Posa strutture, moduli' + (d.Nopt ? ' e ottimizzatori' : '') + (d.ballastT ? ' e zavorre' : ''), +(H.mod + H.opt + (H.ballast || 0) + (H.sheet || 0)).toFixed(1), 'h', S.cost_h);
+  add(C.MDO, 'mdo_dc', 'Cablaggio stringhe, connettori e vie cavi', +(H.strings + H.trays + H.equip).toFixed(1), 'h', S.cost_h);
+  add(C.MDO, 'mdo_ac', 'Posa inverter e linee AC', +(H.inv + H.ac + (H.led || 0)).toFixed(1), 'h', S.cost_h);
+  add(C.MDO, 'mdo_qe', 'Realizzazione quadri, collegamento a QG/cabina e monitoraggio', +(H.qe + H.mon).toFixed(1), 'h', S.cost_h);
+  add(C.MDO, 'mdo_test', 'Verifiche iniziali (isolamento, Voc/Isc, curve I-V), prove SPI, messa in servizio', +H.test.toFixed(1), 'h', S.cost_h, { ref: 'CEI 64-8/6 · CEI EN 62446-1' });
+  if (mode === 'carport') add(C.MDO, 'mdo_steel', 'Montaggio carpenteria metallica (squadra carpentieri)', +d.hSteel.toFixed(1), 'h', S.carp_cost_h);
+  const vehicles = Math.max(1, Math.ceil(S.team / 3));
+  if (!SITE) add(C.MDO, 'travel_km', `Trasferimenti mezzi (${vehicles} mezzi × ${d.daysTot} gg × ${S.km * 2} km A/R)`, Math.round(vehicles * d.daysTot * S.km * 2), 'km', S.eur_km);
+  if (!SITE && S.trasf_pp > 0) add(C.MDO, 'travel_pp', 'Trasferta squadra (vitto e alloggio)', S.team * d.days, 'gg·pers', S.trasf_pp);
+
+  /* ---- Noli ---- */
+  if (mode === 'roof') {
+    const lifts = Math.ceil(d.Nmod / M.pallet) + Math.ceil(d.Nmod / 60) + Math.ceil((d.ballastT || 0) / 1.2) + 1;
+    d.lifts = lifts;
+    if (S.lift === 'gru') add(C.NOL, 'crane', `Autogru 35–50 t con operatore (${lifts} sollevamenti, ~30/giorno)`, Math.max(1, Math.ceil(lifts / 30)), 'gg', P.crane);
+    else { add(C.NOL, 'hoist', 'Montacarichi / elevatore per moduli', Math.ceil(d.days * 0.5), 'gg', P.hoist); add(C.NOL, 'hoist_tr', 'Trasporto, montaggio e smontaggio montacarichi', 1, 'a corpo', P.hoist_tr); }
+    if (S.ple) { add(C.NOL, 'ple', 'Piattaforma di lavoro elevabile (PLE)', d.days, 'gg', P.ple); add(C.NOL, 'ple_tr', 'Trasporto PLE A/R', 1, 'a corpo', P.ple_tr); }
+  } else {
+    add(C.NOL, 'crane', 'Autogru per montaggio carpenteria (~8 t/giorno)', Math.max(1, Math.ceil(d.steelT / 8)), 'gg', P.crane);
+    add(C.NOL, 'telehandler', 'Sollevatore telescopico per movimentazione moduli', Math.max(1, Math.ceil(d.days * 0.6)), 'gg', P.telehandler);
+    add(C.NOL, 'ple', 'Piattaforma di lavoro elevabile (PLE)', d.days, 'gg', P.ple);
+    add(C.NOL, 'ple_tr', 'Trasporto PLE A/R', 1, 'a corpo', P.ple_tr);
+    if (S.found === 'plinto') add(C.NOL, 'excav', 'Escavatore 3,5 t con operatore', Math.ceil(d.ncol / 6), 'gg', P.excav);
+  }
+
+  /* ---- Sicurezza ---- */
+  if (mode === 'roof') {
+    const parapM = Math.round(d.perimeter * S.edge_pct / 100);
+    add(C.SIC, 'parap_ms', 'Parapetti provvisori di bordo EN 13374: montaggio, smontaggio e 1° mese', parapM, 'm', P.parap_ms, { ref: 'D.Lgs. 81/08 art. 125–126 · UNI EN 13374' });
+    add(C.SIC, 'parap_nolo', 'Nolo parapetti provvisori, mesi successivi al primo', parapM * (d.months - 1), 'm·mese', P.parap_nolo);
+    if (S.scaf_m > 0) {
+      const m2 = Math.round(S.scaf_m * (S.eave_h + 1.2));
+      add(C.SIC, 'scaf_ms', 'Ponteggio di facciata: montaggio, smontaggio e 1° mese, con PiMUS', m2, 'm²', P.scaf_ms, { ref: 'D.Lgs. 81/08 art. 131–136' });
+      add(C.SIC, 'scaf_nolo', 'Nolo ponteggio mesi successivi', d.months > 1 ? m2 * (d.months - 1) : 0, 'm²·mese', P.scaf_nolo);
+    }
+    add(C.SIC, 'tower_ms', 'Torre scala di accesso alla copertura (montaggio e smontaggio)', d.towers, 'pz', P.tower_ms, { ref: 'D.Lgs. 81/08 art. 113' });
+    add(C.SIC, 'tower_nolo', 'Nolo torre scala', d.towers * d.months, 'pz·mese', P.tower_nolo);
+    add(C.SIC, 'skylight', 'Protezione lucernari (reti/grigliati anticaduta)', d.skylight, 'm²', P.skylight, { ref: 'D.Lgs. 81/08 art. 148' });
+    if (S.lifeline_m > 0) {
+      add(C.SIC, 'lifeline', 'Linea vita permanente su copertura (EN 795 tipo C) con certificazione', S.lifeline_m, 'm', P.lifeline, { mat: true, ref: 'UNI EN 795 · UNI 11578' });
+      add(C.SIC, 'lifeline_doc', 'Elaborato tecnico della copertura', 1, 'a corpo', P.lifeline_doc);
+    }
+    add(C.SIC, 'fence', 'Delimitazione area di stoccaggio e sollevamento (montaggio, smontaggio, 1° mese)', Math.round(30 + 0.02 * d.Nmod), 'm', P.fence);
+  } else {
+    const fm = S.fence_m > 0 ? S.fence_m : Math.round(2 * (d.Lrow + S.cov_depth * d.wings) + 10);
+    add(C.SIC, 'fence', 'Recinzione mobile di cantiere in area parcheggio (montaggio, smontaggio, 1° mese)', fm, 'm', P.fence, { ref: 'D.Lgs. 81/08 All. XV' });
+    add(C.SIC, 'fence_nolo', 'Nolo recinzione, mesi successivi al primo', fm * (d.months - 1), 'm·mese', P.fence_nolo);
+  }
+  if (!SITE) add(C.SIC, 'site_hut', 'Box spogliatoio e WC chimico (nolo mensile)', d.months, 'mese', P.site_hut, { ref: 'D.Lgs. 81/08 All. XIII' });
+  if (!SITE) add(C.SIC, 'dpi', 'DPI collettivi, segnaletica di cantiere, estintori, cassetta PS', 1, 'a corpo', P.dpi);
+
+  /* ---- Progettazione e pratiche ---- */
+  const kWp = d.Pdc;
+  if (!SITE && S.prog_el) add(C.PRO, 'prog_el', 'Progetto elettrico esecutivo (DM 37/08, CEI 0-2) e as-built', 1, 'a corpo', Math.round(Math.max(2000, 6 * kWp)), { ref: 'DM 37/08 art. 5' });
+  if (mode === 'roof') {
+    if (S.prog_str) add(C.PRO, 'prog_str', 'Verifica strutturale della copertura esistente', 1, 'a corpo', Math.round(Math.max(1500, 3 * kWp)), { ref: 'NTC 2018 cap. 8' });
+  } else {
+    add(C.PRO, 'prog_str', 'Progetto strutturale pensilina e fondazioni', 1, 'a corpo', Math.round(Math.max(3000, 12 * kWp)), { ref: 'NTC 2018' });
+    add(C.PRO, 'collaudo', 'Collaudo statico', 1, 'a corpo', Math.round(Math.max(1500, 4 * kWp)), { ref: 'DPR 380/2001 art. 67' });
+    add(C.PRO, 'deposito', 'Denuncia/deposito opere strutturali', 1, 'a corpo', P.struct_cp_dep, { ref: 'DPR 380/2001 art. 65 e 93' });
+    add(C.PRO, 'titolo', 'Titolo edilizio della pensilina (regime da verificare caso per caso)', 1, 'a corpo', P.titolo_cp, { ref: 'D.Lgs. 190/2024 · DPR 380/2001' });
+  }
+  if (!SITE && S.lightning_doc) add(C.PRO, 'lightning', 'Valutazione rischio fulminazione', 1, 'a corpo', P.lightning, { ref: 'CEI EN 62305-2' });
+  if (!SITE && S.vvf) add(C.PRO, 'vvf_doc', 'Valutazione/pratica prevenzione incendi FV', 1, 'a corpo', Math.round(1200 + 1 * kWp), { ref: 'DPR 151/2011 · Nota DCPREV 1324/2012' });
+  if (mode === 'roof') add(C.PRO, 'edil', 'Comunicazione/titolo edilizio e verifica vincoli paesaggistici', 1, 'a corpo', P.edil, { ref: 'D.Lgs. 190/2024' });
+  if (!SITE) {
+    add(C.PRO, 'conn_doc', 'Pratiche di connessione (TICA, GAUDÌ, regolamento di esercizio, GSE)', 1, 'a corpo', d.conn === 'MT' ? 2500 : 1200, { ref: 'TICA · CEI 0-16/0-21' });
+    add(C.PRO, 'tica', 'Corrispettivo per il preventivo di connessione (TICA)', 1, 'a corpo', tica(PacTot), { ref: 'del. ARERA 99/08 All. A' });
+    add(C.PRO, 'conn_cost', 'Corrispettivo di connessione (da preventivo del distributore)', S.conn_cost > 0 ? 1 : 0, 'a corpo', S.conn_cost);
+    if (PacTot > 20) add(C.PRO, 'dogane', 'Licenza di officina elettrica (Agenzia Dogane)', 1, 'a corpo', P.dogane, { ref: 'D.Lgs. 504/1995' });
+    add(C.PRO, 'dico', 'Dichiarazione di conformità, verifiche SPI con cassetta prova relè', 1, 'a corpo', d.conn === 'MT' ? 1500 : 600, { ref: 'DM 37/08 · CEI 0-21/0-16' });
+    if (S.dl) add(C.PRO, 'dl', 'Direzione lavori', 1, 'a corpo', Math.round(Math.max(1000, 2 * kWp)));
+  }
+
+  /* ---- Totali ---- */
+  const disc = S.disc_mat / 100;
+  let sumMat = 0, sumAll = 0;
+  for (const it of items) {
+    it.tot = it.qty * it.unit * (it.mat ? (1 - disc) : 1);
+    if (it.mat) sumMat += it.tot;
+    sumAll += it.tot;
+  }
+  // coordinamento sicurezza a percentuale (CSP/CSE)
+  const coordDef = Math.round(Math.max(1500, sumAll * S.coord_pct / 100));
+  add(C.SIC, 'coord', `Coordinamento sicurezza CSP/CSE (${S.coord_pct}% lavori, min 1.500 €)`, !SITE && S.coord_pct > 0 ? 1 : 0, 'a corpo', coordDef, { ref: 'D.Lgs. 81/08 art. 90–92' });
+  const last = items[items.length - 1];
+  if (last && last.id === 'coord') { last.tot = last.qty * last.unit; sumAll += last.tot; }
+  const transport = sumMat * S.transport / 100;
+  const sub = sumAll + transport;
+  const contingency = sub * S.contingency / 100;
+  const cost = sub + contingency;
+
+  const byCat = {};
+  for (const k of Object.values(C)) byCat[k] = 0;
+  for (const it of items) byCat[it.cat] = (byCat[it.cat] || 0) + it.tot;
+  byCat['Trasporto materiali'] = transport;
+  byCat['Imprevisti'] = contingency;
+
+  // prezzo: guidato da markup o da prezzo imposto
+  let price, markup;
+  if (S.price_mode === 'price' && S.price > 0) { price = S.price; markup = cost > 0 ? (price / cost - 1) * 100 : 0; }
+  else { markup = S.markup; price = cost * (1 + markup / 100); }
+  const margin = price > 0 ? (price - cost) / price * 100 : 0;
+
+  return {
+    d, items, checks, byCat,
+    tot: { sumMat, transport, contingency, cost, price, markup, margin, profit: price - cost,
+      costWp: d.Pdc > 0 ? cost / (d.Pdc * 1000) : 0, priceWp: d.Pdc > 0 ? price / (d.Pdc * 1000) : 0 }
+  };
+}
+
+
+/* ============================================================
+   SITO: più sezioni (tetti, pensiline) con costi comuni contati una volta
+   ============================================================ */
+const SITE_CAT = {
+  QE: 'Quadri, protezioni e connessione', INV: 'Inverter e accumulo', MON: 'Monitoraggio',
+  SIC: 'Sicurezza (D.Lgs. 81/08)', MDO: 'Manodopera e trasferte', PRO: 'Progettazione, pratiche e connessione'
+};
+const CAT_ORDER_ALL = ['Moduli e ottimizzatori', 'Strutture di supporto', 'Inverter e accumulo', 'Cavi, connettori e vie cavi',
+  'Quadri, protezioni e connessione', 'Monitoraggio', 'Opere edili in copertura', 'Opere civili e fondazioni',
+  'Sicurezza (D.Lgs. 81/08)', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
+const DESIGN_IDS = ['prog_el', 'prog_str', 'collaudo', 'deposito', 'lightning', 'vvf_doc', 'dl'];
+
+function mergeSec(common, sec) {
+  const o = Object.assign({}, common, sec.state);
+  o.ov = sec.state.ov || {};
+  return o;
+}
+
+function computeSite(site) {
+  const C0 = site.common;
+  const secs = (site.sections || []).filter(x => x && x.state);
+  // 1° passaggio: potenza AC complessiva per decidere la connessione
+  let pacPre = 0;
+  for (const x of secs) { try { pacPre += compute(mergeSec(C0, x), x.mode, { site: true }).d.Pac || 0; } catch (e) {} }
+  const conn = C0.conn === 'auto' ? (pacPre > 100 ? 'MT' : 'BT') : C0.conn;
+  // 2° passaggio con la connessione di sito
+  const res = secs.map(x => {
+    let r;
+    try { r = compute(mergeSec(C0, x), x.mode, { site: true, conn }); }
+    catch (e) {
+      r = { failed: true, d: { Pdc: 0, Pac: 0, Ninv: 0, Nmod: 0, days: 0, daysTot: 0, hTot: 0, I: { iac: 0, vac: 400, pac: 0, name: '—' }, C: {} }, items: [],
+        checks: [{ lvl: 'err', title: 'Errore di calcolo nella sezione', detail: 'Controlla i dati inseriti (' + e.message + ').', ref: '' }] };
+    }
+    r.sec = x;
+    r.direct = r.items.reduce((a, b) => a + b.tot, 0);
+    return r;
+  });
+  const sd = {
+    conn, pdc: 0, pac: 0, ninv: 0, nmod: 0, hours: 0, daysWork: 0, daysTot: 0, ib: 0,
+    nSecs: res.length
+  };
+  for (const r of res) {
+    sd.pdc += r.d.Pdc; sd.pac += r.d.Pac; sd.ninv += r.d.Ninv; sd.nmod += r.d.Nmod;
+    sd.daysWork += r.d.days; sd.daysTot += r.d.daysTot;
+    sd.ib += r.d.Ninv * r.d.I.iac * (r.d.I.vac === 800 ? 0 : 1);
+  }
+  // ore comuni di sito (cabina/interfaccia, monitoraggio, coordinamento tra sezioni): si sommano alla durata del cantiere
+  const hCommon = res.length ? (conn === 'MT' ? 24 : 0) + (C0.monitor ? 6 + 0.5 * sd.ninv : 0) + (res.length > 1 ? 8 : 0) : 0;
+  // durata: ore di montaggio di tutte le sezioni + ore comuni con la stessa squadra; giorni di carpenteria/opere civili si sommano
+  if (res.length) {
+    const crew = Math.max(1, C0.team * C0.h_day);
+    let other = 0, extra = 0, hAll = hCommon;
+    for (const r of res) { const base = Math.max(1, Math.ceil(r.d.hTot / crew)); other += r.d.days - base; extra += r.d.daysTot - r.d.days; hAll += r.d.hTot; }
+    sd.daysWork = other + Math.max(1, Math.ceil(hAll / crew));
+    sd.daysTot = sd.daysWork + extra;
+  }
+  sd.hCommon = hCommon;
+  sd.months = Math.max(1, Math.ceil(sd.daysTot / 21));
+
+  // voci comuni
+  const items = [], checks = [];
+  const ov = C0.ov || {};
+  const add = (cat, id, desc, qty, um, unit, opt = {}) => {
+    if (!(qty > 0)) return;
+    const u = (ov[id] !== undefined && ov[id] !== '' && !isNaN(+ov[id])) ? +ov[id] : unit;
+    items.push({ cat, id, desc, qty, um, unit: u, def: unit, mat: !!opt.mat, ref: opt.ref || '', edited: u !== unit, field: '' });
+  };
+  const chk = (lvl, title, detail, ref) => checks.push({ lvl, title, detail, ref: ref || '', sec: 'Sito' });
+  const P = PRICES, K = SITE_CAT, Pac = sd.pac, kWp = sd.pdc;
+
+  if (!res.length) chk('warn', 'Nessuna sezione', 'Aggiungi una sezione tetto o pensilina per iniziare.');
+  if (C0.conn === 'auto') chk('info', `Connessione di sito: ${conn}`, `Potenza AC complessiva ${fx(Pac, 1)} kW${conn === 'MT' ? ' oltre 100 kW' : ' fino a 100 kW'}. Se lo stabilimento ha già una cabina MT, impostala in Dati comuni.`, 'TICA ARERA');
+  if (conn === 'BT') {
+    if (Pac > 100) chk('err', 'Potenza di sito oltre il limite BT', `${fx(Pac, 1)} kW > 100 kW: la connessione è di norma in MT.`, 'TICA ARERA · CEI 0-21');
+    const icc = Pac <= 33 ? 10 : 15;
+    chk('info', 'Potere di interruzione minimo', `Icc convenzionale ${icc} kA (BT trifase ${Pac <= 33 ? '≤' : '>'} 33 kW).`, 'CEI 0-21');
+    const InTot = nextIn(Math.max(sd.ib, 1));
+    if (Pac > 11.08) {
+      chk('info', 'SPI esterno unico per il sito', 'Oltre 11,08 kW serve SPI esterno' + (Pac > 20 ? ' e dispositivo di rincalzo.' : '.'), 'CEI 0-21');
+      add(K.QE, 'spi', 'Sistema di protezione di interfaccia (SPI) esterno certificato', 1, 'pz', P.spi_bt, { mat: true, ref: 'CEI 0-21' });
+      add(K.QE, 'ddi', 'Dispositivo di interfaccia: bobina di minima + comando motore', 1, 'pz', P.ddi, { mat: true, ref: 'CEI 0-21' });
+    }
+    if (Pac > 20) add(K.QE, 'ddr', `Dispositivo di rincalzo (interruttore 4P In ${InTot} A con bobina)`, 1, 'pz', breakerPrice(InTot), { mat: true, ref: 'CEI 0-21' });
+  } else {
+    add(K.QE, 'mt_adeg', 'Adeguamento cabina MT: SPI con TV/TO, aggiornamento PG, prove relè', 1, 'a corpo', P.mt_adeg, { ref: 'CEI 0-16' });
+    const cciOn = C0.cci === 'si' || (C0.cci === 'auto' && Pac >= 100);
+    if (cciOn) { add(K.QE, 'cci', 'Controllore Centrale d\'Impianto (CCI) con configurazione', 1, 'pz', P.cci, { ref: 'CEI 0-16 All. O' }); chk('info', 'CCI richiesto', `Potenza di sito ${fx(Pac, 0)} kW ≥ 100 kW in MT.`, 'CEI 0-16 All. O · del. ARERA 540/2021'); }
+    add(K.QE, 'm2', 'Sistema di misura dell\'energia prodotta (M2) con TA', 1, 'a corpo', P.m2_mt);
+    if (C0.new_trafo) {
+      const nT = Math.max(1, Math.ceil(Pac * 1.1 / 2000));
+      const kva = Pac * 1.1 / nT;
+      const t = TRAFO.find(r => r[0] >= kva) || TRAFO[TRAFO.length - 1];
+      sd.trafo = { n: nT, kva: t[0] };
+      add(K.QE, 'trafo', `Trasformatore MT/BT in resina ${t[0]} kVA (Ecodesign UE 2019/1783)`, nT, 'pz', t[1], { mat: true });
+      add(K.QE, 'mt_cell', 'Scomparto MT di protezione trasformatore + collegamenti', nT, 'pz', P.mt_cell, { mat: true });
+    } else chk('info', 'Verifica capacità cabina', `Il trasformatore esistente deve assorbire ${fx(Pac, 0)} kW di immissione; controllare PG e regolamento di esercizio.`, 'CEI 0-16');
+  }
+  if (C0.bess_kwh > 0) {
+    add(K.INV, 'bess', 'Sistema di accumulo C&I (batterie + PCS + BMS)', C0.bess_kwh, 'kWh', P.bess, { mat: true });
+    add(K.INV, 'bess_inst', 'Installazione, cablaggio e messa in servizio accumulo', 1, 'a corpo', P.bess_inst + 8 * C0.bess_kwh);
+  }
+  if (C0.monitor && sd.ninv > 0) {
+    add(K.MON, 'logger', 'Datalogger di impianto (fino a 80 inverter)', Math.max(1, Math.ceil(sd.ninv / 80)), 'pz', P.logger, { mat: true });
+    add(K.MON, 'meter', 'Power meter trifase con TA per gestione e controllo immissione', 1, 'pz', P.meter, { mat: true });
+    add(K.MON, 'router', 'Router 4G industriale', 1, 'pz', P.router, { mat: true });
+  }
+  // manodopera comune
+  if (res.length) {
+  add(K.MDO, 'mdo_site', 'Collegamento al punto di connessione, interfaccia, monitoraggio e coordinamento tra sezioni', +hCommon.toFixed(1), 'h', C0.cost_h);
+  const vehicles = Math.max(1, Math.ceil(C0.team / 3));
+  add(K.MDO, 'travel_km', `Trasferimenti mezzi (${vehicles} mezzi × ${sd.daysTot} gg × ${C0.km * 2} km A/R)`, Math.round(vehicles * sd.daysTot * C0.km * 2), 'km', C0.eur_km);
+  if (C0.trasf_pp > 0) add(K.MDO, 'travel_pp', 'Trasferta squadra (vitto e alloggio)', C0.team * sd.daysWork, 'gg·pers', C0.trasf_pp);
+  // sicurezza di cantiere
+  add(K.SIC, 'site_hut', 'Box spogliatoio e WC chimico (nolo mensile)', sd.months, 'mese', P.site_hut, { ref: 'D.Lgs. 81/08 All. XIII' });
+  add(K.SIC, 'dpi', 'DPI collettivi, segnaletica di cantiere, estintori, cassetta PS', 1, 'a corpo', P.dpi + (res.length > 1 ? 150 * (res.length - 1) : 0));
+  // progettazione e pratiche (una volta per sito)
+  if (C0.prog_el) add(K.PRO, 'prog_el', 'Progetto elettrico esecutivo (DM 37/08, CEI 0-2) e as-built', 1, 'a corpo', Math.round(Math.max(2000, 6 * kWp)), { ref: 'DM 37/08 art. 5' });
+  if (C0.lightning_doc) add(K.PRO, 'lightning', 'Valutazione rischio fulminazione', 1, 'a corpo', P.lightning * Math.max(1, res.filter(r => r.sec.mode === 'roof').length || 1), { ref: 'CEI EN 62305-2' });
+  if (C0.vvf) add(K.PRO, 'vvf_doc', 'Valutazione/pratica prevenzione incendi FV', 1, 'a corpo', Math.round(1200 + 1 * kWp), { ref: 'DPR 151/2011 · Nota DCPREV 1324/2012' });
+  add(K.PRO, 'conn_doc', 'Pratiche di connessione (TICA, GAUDÌ, regolamento di esercizio, GSE)', 1, 'a corpo', conn === 'MT' ? 2500 : 1200, { ref: 'TICA · CEI 0-16/0-21' });
+  add(K.PRO, 'tica', 'Corrispettivo per il preventivo di connessione (TICA)', 1, 'a corpo', tica(Pac), { ref: 'del. ARERA 99/08 All. A' });
+  add(K.PRO, 'conn_cost', 'Corrispettivo di connessione (da preventivo del distributore)', C0.conn_cost > 0 ? 1 : 0, 'a corpo', C0.conn_cost);
+  if (Pac > 20) add(K.PRO, 'dogane', 'Licenza di officina elettrica (Agenzia Dogane)', 1, 'a corpo', P.dogane, { ref: 'D.Lgs. 504/1995' });
+  add(K.PRO, 'dico', 'Dichiarazione di conformità, verifiche SPI con cassetta prova relè', 1, 'a corpo', conn === 'MT' ? 1500 : 600, { ref: 'DM 37/08 · CEI 0-21/0-16' });
+  if (C0.dl) add(K.PRO, 'dl', 'Direzione lavori', 1, 'a corpo', Math.round(Math.max(1000, 2 * kWp)));
+  }
+
+  // totali
+  const disc = (C0.disc_mat || 0) / 100;
+  let sumMat = 0, sumAll = 0;
+  for (const r of res) for (const it of r.items) { if (it.mat) sumMat += it.tot; sumAll += it.tot; }   // (sconto già applicato nelle sezioni)
+  for (const it of items) { it.tot = it.qty * it.unit * (it.mat ? (1 - disc) : 1); if (it.mat) sumMat += it.tot; sumAll += it.tot; }
+  const coordDef = Math.round(Math.max(1500, sumAll * C0.coord_pct / 100));
+  if (C0.coord_pct > 0 && res.length) {
+    add(K.SIC, 'coord', `Coordinamento sicurezza CSP/CSE (${C0.coord_pct}% lavori, min 1.500 €)`, 1, 'a corpo', coordDef, { ref: 'D.Lgs. 81/08 art. 90–92' });
+    const it = items[items.length - 1]; it.tot = it.qty * it.unit; sumAll += it.tot;
+  }
+  const transport = sumMat * C0.transport / 100;
+  const sub = sumAll + transport;
+  const contingency = sub * C0.contingency / 100;
+  const cost = sub + contingency;
+  let price, markup;
+  if (C0.price_mode === 'price' && C0.price > 0) { price = C0.price; markup = cost > 0 ? (price / cost - 1) * 100 : 0; }
+  else { markup = C0.markup; price = cost * (1 + markup / 100); }
+  const margin = price > 0 ? (price - cost) / price * 100 : 0;
+
+  const byCat = {};
+  for (const k of CAT_ORDER_ALL) byCat[k] = 0;
+  for (const r of res) for (const it of r.items) byCat[it.cat] = (byCat[it.cat] || 0) + it.tot;
+  for (const it of items) byCat[it.cat] = (byCat[it.cat] || 0) + it.tot;
+  byCat['Trasporto materiali'] = transport;
+  byCat['Imprevisti'] = contingency;
+
+  // quote per sezione: diretto + costi comuni, trasporto e imprevisti ripartiti per kWp
+  const commonTot = items.reduce((a, b) => a + b.tot, 0);
+  const shared = commonTot + transport + contingency;
+  const k = cost > 0 ? price / cost : 1;
+  for (const r of res) {
+    const w = sd.pdc > 0 ? r.d.Pdc / sd.pdc : 1 / Math.max(res.length, 1);
+    r.alloc = r.direct + shared * w;
+    r.allocPrice = r.alloc * k;
+  }
+  const allItems = [];
+  for (const r of res) for (const it of r.items) allItems.push(Object.assign({ secName: r.sec.name }, it));
+  for (const it of items) allItems.push(Object.assign({ secName: 'Costi comuni di sito' }, it));
+  const sic = byCat['Sicurezza (D.Lgs. 81/08)'] || 0;
+  const design = allItems.filter(i => DESIGN_IDS.includes(i.id)).reduce((a, b) => a + b.tot, 0);
+  const proTot = byCat['Progettazione, pratiche e connessione'] || 0;
+  // verifiche: sezione per sezione + sito
+  const allChecks = [...checks];
+  for (const r of res) for (const c of r.checks) allChecks.push(Object.assign({ sec: r.sec.name }, c));
+
+  return {
+    sd, res, items, checks: allChecks, siteChecks: checks, byCat, allItems,
+    tot: { sumMat, transport, contingency, commonTot, cost, price, markup, margin, profit: price - cost,
+      costKw: kWp > 0 ? cost / kWp : 0, priceKw: kWp > 0 ? price / kWp : 0, sic, design, pratiche: proTot - design }
+  };
+}
+
+const api = { compute, computeSite, CAT_ORDER_ALL, ST_DEFAULTS, MOD_PRESETS, INV_PRESETS, ROOF_TYPES, PRICES, qsk, pickAC, nextIn, tica };
+if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PVEngine = api;
+})(this);
+</script>
+<script>/* Stati di partenza: dati comuni di sito, sezioni tetto/pensilina, sito di esempio */
+(function (root) {
+const E = (typeof module !== 'undefined' && module.exports) ? require('./engine.js') : root.PVEngine;
+const SCHEMA = 6;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+// dati che valgono per tutto il sito (connessione, clima, squadra, pratiche, condizioni economiche)
+function commonDefault() {
+  return {
+    conn: 'auto', new_trafo: false, cci: 'auto', vvf: true, monitor: true, bess_kwh: 0, conn_cost: 0,
+    t_min: -15, t_max: 70, snow_zone: 'I-A', altitude: 345,
+    team: 4, h_day: 8, cost_h: 30, carp_cost_h: 34, km: 30, eur_km: 0.5, trasf_pp: 0,
+    prog_el: true, lightning_doc: true, dl: true,
+    coord_pct: 1.2, disc_mat: 0, transport: 3, contingency: 5,
+    markup: 30, price: 0, price_mode: 'markup',
+    ov: {}
+  };
+}
+// dati propri di ogni sezione
+function sectionStateDefault(mode) {
+  const base = {
+    mod_preset: 'j620b', mod: Object.assign({}, E.MOD_PRESETS.j620b),
+    inv_preset: 'auto', inv: Object.assign({}, E.INV_PRESETS.i100),
+    st: Object.assign({}, E.ST_DEFAULTS),
+    kwp_target: 0, ns_override: 0, ninv_override: 0, dcac_max: 1.25, opt_pct: 0,
+    l_dc: 35, l_extra: 8, dv_dc_max: 1.5, k_group_dc: 0.65, t_cab_dc: 70,
+    l_ac1: 25, l_ac2: 60, dv_ac_max: 1.0, k_group_ac: 0.8, t_amb: 40, cable_index: 1.0,
+    tray_dc: 0, tray_ac: 0, lps: false,
+    ov: {}
+  };
+  if (mode === 'roof') return Object.assign(base, {
+    roof_type: 'grecata', roof_area: 2600, fill: 0, kwp_target: 300,
+    roof_capacity: 25, ballast_kg: null, asb_m2: 0,
+    eave_h: 8, perimeter: 0, edge_pct: 100, skylight_m2: null, lifeline_m: 0,
+    lift: 'gru', ple: true, scaf_m: 0, towers: 0, equip: true, prog_str: true
+  });
+  return Object.assign(base, {
+    l_dc: 30, l_ac1: 15, l_ac2: 80,
+    stalls: 80, layout: 'doppia', stall_w: 2.5, cov_depth: 5.0, span: 5.0, steel_kgm2: 0,
+    found: 'plinto', plinth_m3: 0, cover: 'nessuna', gutters: true, led: true, ev_n: 0,
+    trench_m: 80, fence_m: 0, equip: false
+  });
+}
+function newSection(mode, name) {
+  return { id: uid(), mode, name: name || (mode === 'roof' ? 'Tetto' : 'Pensilina'), state: sectionStateDefault(mode) };
+}
+function newSite(name) {
+  return { id: uid(), v: SCHEMA, name: name || 'Nuovo sito', location: '', client: '', notes: '', common: commonDefault(), sections: [], updated: Date.now() };
+}
+function exampleSite() {
+  const s = newSite('Sito di esempio');
+  s.location = 'Pont-Saint-Martin (AO)'; s.client = 'Esempio';
+  const a = newSection('roof', 'Tetto capannone A'); a.state.kwp_target = 200; a.state.roof_area = 2000;
+  const b = newSection('carport', 'Pensiline parcheggio'); b.state.stalls = 40;
+  s.sections.push(a, b);
+  return s;
+}
+// riallinea un sito salvato ai valori di default (campi nuovi aggiunti nelle versioni successive)
+function normalizeSite(x) {
+  const s = Object.assign(newSite(), x || {});
+  s.common = Object.assign(commonDefault(), (x && x.common) || {}); s.common.ov = (x && x.common && x.common.ov) || {};
+  s.sections = ((x && x.sections) || []).filter(Boolean).map(sec => {
+    const mode = sec.mode === 'carport' ? 'carport' : 'roof';
+    const d = sectionStateDefault(mode); const st = sec.state || {};
+    const o = Object.assign(d, st);
+    o.mod = Object.assign({}, d.mod, st.mod || {}); o.inv = Object.assign({}, d.inv, st.inv || {}); o.st = Object.assign({}, d.st, st.st || {}); o.ov = st.ov || {};
+    return { id: sec.id || uid(), mode, name: sec.name || (mode === 'roof' ? 'Tetto' : 'Pensilina'), state: o };
+  });
+  s.v = SCHEMA;
+  return s;
+}
+const api = { SCHEMA, uid, commonDefault, sectionStateDefault, newSection, newSite, exampleSite, normalizeSite };
+if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PVDefaults = api;
+})(this);
+</script>
+<script>(function () {
+'use strict';
+const E = window.PVEngine, D = window.PVDefaults;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const nf = (v, dec = 0) => (isFinite(v) ? +v : 0).toLocaleString('it-IT', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+const eur = (v, dec = 0) => nf(v, dec) + ' €';
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const fmtDate = (t) => { try { return new Date(t).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+
+/* ================= Archivio (browser) ================= */
+const K_SITES = 'pvq_sites6', K_UI = 'pvq_ui6', K_BACKUP = 'pvq_backup6', K_OPEN = 'pvq_open6';
+const store = {
+  ok: true,
+  get(k, def) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { this.ok = false; return def; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { this.ok = false; return false; } }
+};
+
+const app = { sites: [], view: 'home', siteId: null, tab: 'recap', R: null, filter: '' };
+(function load() {
+  const raw = store.get(K_SITES, null);
+  app.sites = Array.isArray(raw) && raw.length ? raw.map(D.normalizeSite) : [D.exampleSite()];
+  const u = store.get(K_UI, {});
+  if (u && u.siteId && app.sites.some(s => s.id === u.siteId)) { app.siteId = u.siteId; app.view = u.view === 'site' ? 'site' : 'home'; app.tab = u.tab || 'recap'; }
+})();
+const site = () => app.sites.find(s => s.id === app.siteId);
+const curSec = () => { const s = site(); return s ? s.sections.find(x => x.id === app.tab) : null; };
+const secRes = (id) => app.R ? app.R.res.find(r => r.sec.id === id) : null;
+
+let saveT = null, savedAt = null;
+function touch() { const s = site(); if (s) s.updated = Date.now(); clearTimeout(saveT); saveT = setTimeout(saveNow, 250); }
+function saveNow() {
+  const ok = store.set(K_SITES, app.sites);
+  store.set(K_UI, { view: app.view, siteId: app.siteId, tab: app.tab });
+  savedAt = ok ? Date.now() : null;
+  renderStatus();
+}
+function renderStatus() {
+  const el = $('#saveState'); if (!el) return;
+  const last = store.get(K_BACKUP, 0);
+  const newest = Math.max(0, ...app.sites.map(s => s.updated || 0));
+  const pending = newest > last;
+  el.innerHTML = (store.ok ? `<span>${savedAt ? 'Salvato in questo browser · ' + fmtDate(savedAt).split(', ')[1] : 'Salvataggio automatico attivo'}</span>` : `<span class="pill err">Salvataggio non disponibile: usa Backup</span>`) +
+    ` <button class="pill ${pending ? 'warn' : 'ok'} linkpill" id="bkPill" type="button">${pending ? 'Backup da aggiornare' : 'Backup aggiornato'}</button>`;
+}
+
+/* ================= Schema dei campi ================= */
+const opts = (o) => Object.entries(o).map(([v, x]) => [v, typeof x === 'string' ? x : x.name]);
+const kitOf = (s) => ((E.ROOF_TYPES[s.roof_type] || {}).kit || '');
+
+function secGroups(mode) {
+  const R = mode === 'roof';
+  const g = [];
+  g.push(R ? {
+    id: 'site', title: 'Copertura', sub: 'Dati da sopralluogo', open: true, fields: [
+      { k: 'roof_type', l: 'Tipologia di copertura', t: 'sel', o: opts(E.ROOF_TYPES), wide: true },
+      { k: 'roof_area', l: 'Superficie lorda copertura', u: 'm²' },
+      { k: 'fill', l: 'Fattore di utilizzo', u: '0–1', step: 0.01, auto: (r) => nf(r.d.fill, 2), h: 'Quota occupabile dopo fasce VVF, bordi, lucernari, impianti e ombre. Vuoto = valore tipico.' },
+      { k: 'kwp_target', l: 'Potenza obiettivo', u: 'kWp', h: '0 = riempi tutta la superficie utile.' },
+      { k: 'roof_capacity', l: 'Portata residua copertura', u: 'kg/m²', h: 'Sovraccarico permanente ammissibile dichiarato dallo strutturista.' },
+      { k: 'ballast_kg', l: 'Zavorra per modulo', u: 'kg', blankNull: true, auto: (r) => nf(r.d.ballastKg, 0), show: (s) => s.roof_type.startsWith('piana'), h: 'Da calcolo al vento (NTC 2018 §3.3). Vuoto = valore tipico.' },
+      { k: 'asb_m2', l: 'Superficie da bonificare', u: 'm²', auto: (r, s) => nf(s.roof_area, 0), show: (s) => s.roof_type === 'amianto' },
+      { k: 'eave_h', l: 'Altezza di gronda', u: 'm', step: 0.1 },
+      { k: 'perimeter', l: 'Perimetro copertura', u: 'm', auto: (r) => nf(r.d.perimeter, 0), h: 'Vuoto = stimato da pianta rettangolare 2:1.' },
+      { k: 'prog_str', l: 'Verifica strutturale della copertura', t: 'chk' }
+    ]
+  } : {
+    id: 'site', title: 'Pensilina', sub: 'Geometria (neve e quota nei Dati comuni)', open: true, fields: [
+      { k: 'stalls', l: 'Numero posti auto', u: 'stalli', auto: (r) => r.d.stalls, h: '0 = calcolati dalla potenza obiettivo.' },
+      { k: 'layout', l: 'Schema strutturale', t: 'sel', o: [['mono', 'Monofalda a sbalzo · fila singola'], ['doppia', 'Doppia falda a T · due file']], wide: true },
+      { k: 'stall_w', l: 'Larghezza stallo', u: 'm', step: 0.05 },
+      { k: 'cov_depth', l: 'Profondità coperta per fila', u: 'm', step: 0.1 },
+      { k: 'span', l: 'Interasse pilastri', u: 'm', step: 0.1 },
+      { k: 'kwp_target', l: 'Potenza obiettivo', u: 'kWp', h: '0 = copri tutta la pensilina.' },
+      { k: 'steel_kgm2', l: 'Incidenza acciaio', u: 'kg/m²', step: 0.5, auto: (r) => nf(r.d.steelKgm2, 1), h: 'Stima da carico neve: sostituire con il valore dello strutturista.' },
+      { k: 'found', l: 'Fondazioni', t: 'sel', o: [['plinto', 'Plinti in c.a.'], ['micropali', 'Micropali']] },
+      { k: 'plinth_m3', l: 'Volume per plinto', u: 'm³', step: 0.1, auto: (r) => nf(r.d.plinthM3, 2), show: (s) => s.found === 'plinto' },
+      { k: 'cover', l: 'Tenuta all\'acqua', t: 'sel', o: [['nessuna', 'Solo moduli (non stagna)'], ['lamiera', 'Lamiera grecata sottomodulo']] },
+      { k: 'gutters', l: 'Gronde e pluviali', t: 'chk' },
+      { k: 'led', l: 'Illuminazione LED', t: 'chk' },
+      { k: 'ev_n', l: 'Punti di ricarica EV', u: 'pz' },
+      { k: 'trench_m', l: 'Cavidotto interrato fino al quadro', u: 'm' },
+      { k: 'fence_m', l: 'Recinzione di cantiere', u: 'm', auto: (r, s) => nf(2 * (r.d.Lrow + s.cov_depth * r.d.wings) + 10, 0) }
+    ]
+  });
+  g.push({
+    id: 'mod', title: 'Modulo fotovoltaico', sub: 'Dati da datasheet del fornitore', fields: [
+      { k: 'mod_preset', l: 'Modello', t: 'sel', o: [...opts(E.MOD_PRESETS), ['custom', 'Personalizzato']], wide: true, src: true },
+      { k: 'mod.name', l: 'Descrizione', t: 'text', wide: true },
+      { k: 'mod.p', l: 'Pmax (STC)', u: 'Wp', h: 'Cambiando la potenza il prezzo si aggiorna a €/Wp costante.' },
+      { k: 'mod.price', l: 'Prezzo modulo', u: '€/pz', step: 0.01, h: 'Default da indice pvXchange agosto 2026: sostituisci con la quotazione del distributore.' },
+      { k: 'mod.voc', l: 'Voc', u: 'V', step: 0.01 }, { k: 'mod.vmp', l: 'Vmp', u: 'V', step: 0.01 },
+      { k: 'mod.isc', l: 'Isc', u: 'A', step: 0.01 }, { k: 'mod.imp', l: 'Imp', u: 'A', step: 0.01 },
+      { k: 'mod.bvoc', l: 'Coeff. temp. Voc', u: '%/°C', step: 0.01 }, { k: 'mod.gp', l: 'Coeff. temp. Pmax', u: '%/°C', step: 0.01, h: 'Usato anche per Vmp (scelta conservativa).' },
+      { k: 'mod.L', l: 'Lunghezza', u: 'm', step: 0.001 }, { k: 'mod.W', l: 'Larghezza', u: 'm', step: 0.001 },
+      { k: 'mod.kg', l: 'Peso', u: 'kg', step: 0.1 }, { k: 'mod.fuse', l: 'Corrente inversa max (fusibile serie)', u: 'A' },
+      { k: 'mod.vmax', l: 'Tensione max di sistema', u: 'V' }, { k: 'mod.pallet', l: 'Moduli per pallet', u: 'pz' },
+      { k: 'opt_pct', l: 'Moduli con ottimizzatore', u: '%', h: '100 = un ottimizzatore per ogni modulo.' }
+    ]
+  });
+  const nb = (s) => s.st.mode !== 'budget';
+  g.push({
+    id: 'st', title: 'Struttura di montaggio', sub: 'A budget o scomposta per componenti', fields: [
+      { k: 'st.mode', l: 'Modalità di calcolo', t: 'sel', o: [['dettaglio', 'Scomposta per componenti'], ['budget', 'A budget (voce unica)']], wide: true, h: 'Le quantità dei componenti si calcolano dal numero e dalle dimensioni dei moduli.' },
+      R ? { k: 'st.bunit', l: 'Unità del budget', t: 'sel', o: [['kwp', '€/kWp'], ['mod', '€/modulo'], ['corpo', 'A corpo (€)']], show: (s) => !nb(s) }
+        : { k: 'st.bunit', l: 'Unità del budget', t: 'sel', o: [['kwp', '€/kWp'], ['m2', '€/m² coperto'], ['mod', '€/modulo'], ['corpo', 'A corpo (€)']], show: (s) => !nb(s) },
+      R ? { k: 'st.bval', l: 'Importo budget', u: '€/unità', step: 0.5, rng: true, auto: (r, s) => r.d.stAuto ? nf(r.d.stAuto.unit, s.st.bunit === 'corpo' ? 0 : 2) : '', show: (s) => !nb(s), h: 'Vuoto = stima di mercato per la tipologia. Sola fornitura, la posa resta nella manodopera.' }
+        : { k: 'st.bval_cp', l: 'Importo budget', u: '€/unità', step: 1, rng: true, auto: (r, s) => r.d.stAuto ? nf(r.d.stAuto.unit, s.st.bunit === 'corpo' ? 0 : 2) : '', show: (s) => !nb(s), h: 'Vuoto = stima di mercato corretta per neve e taglia. Fondazioni, gronde e lamiera restano voci separate.' },
+      ...(R ? [
+        { k: 'st.b_ballast', l: 'Budget comprensivo di zavorre', t: 'chk', show: (s) => !nb(s) && kitOf(s).startsWith('ballast') },
+        { k: 'st.clamp', l: 'Morsetti centrali/terminali', u: '€/pz', step: 0.05, show: nb },
+        { k: 'st.clamp_n', l: 'Morsetti per modulo', u: 'pz/mod', step: 0.1, show: nb },
+        { k: 'st.minirail', l: 'Mini-rail', u: '€/pz', step: 0.05, show: (s) => nb(s) && kitOf(s) === 'minirail' },
+        { k: 'st.minirail_n', l: 'Mini-rail per modulo', u: 'pz/mod', step: 0.1, show: (s) => nb(s) && kitOf(s) === 'minirail' },
+        { k: 'st.screw', l: 'Viti autoforanti + EPDM', u: '€/pz', step: 0.01, show: (s) => nb(s) && kitOf(s) === 'minirail' },
+        { k: 'st.screw_n', l: 'Viti per modulo', u: 'pz/mod', step: 1, show: (s) => nb(s) && kitOf(s) === 'minirail' },
+        { k: 'st.rail', l: 'Binario in alluminio', u: '€/m', step: 0.1, show: (s) => nb(s) && kitOf(s).startsWith('rail') },
+        { k: 'st.rail_n', l: 'Binari per fila', u: 'n', step: 1, show: (s) => nb(s) && kitOf(s).startsWith('rail') },
+        { k: 'st.splice', l: 'Giunto binario', u: '€/pz', step: 0.1, show: (s) => nb(s) && kitOf(s).startsWith('rail') },
+        { k: 'st.bracket', l: 'Staffa su trave in c.a.', u: '€/pz', step: 0.1, show: (s) => nb(s) && kitOf(s) === 'rail_bracket' },
+        { k: 'st.bracket_n', l: 'Staffe per modulo', u: 'pz/mod', step: 0.1, show: (s) => nb(s) && kitOf(s) === 'rail_bracket' },
+        { k: 'st.hook', l: 'Gancio per coppi/tegole', u: '€/pz', step: 0.1, show: (s) => nb(s) && kitOf(s) === 'rail_hook' },
+        { k: 'st.hook_n', l: 'Ganci per modulo', u: 'pz/mod', step: 0.1, show: (s) => nb(s) && kitOf(s) === 'rail_hook' },
+        { k: 'st.kit_s', l: 'Kit zavorrato Sud', u: '€/mod', step: 0.5, show: (s) => nb(s) && kitOf(s) === 'ballast_s' },
+        { k: 'st.kit_eo', l: 'Kit zavorrato Est-Ovest', u: '€/mod', step: 0.5, show: (s) => nb(s) && kitOf(s) === 'ballast_eo' },
+        { k: 'st.ballast', l: 'Zavorre in cls', u: '€/kg', step: 0.01, show: (s) => kitOf(s).startsWith('ballast') && !(s.st.mode === 'budget' && s.st.b_ballast) },
+        { k: 'st.prot', l: 'Tappetino protezione guaina', u: '€/pz', step: 0.1, show: (s) => kitOf(s).startsWith('ballast') && !(s.st.mode === 'budget' && s.st.b_ballast) }
+      ] : [
+        { k: 'st.steel', l: 'Carpenteria zincata', u: '€/kg', step: 0.05, show: nb, h: 'Incidenza kg/m² nel gruppo Pensilina.' },
+        { k: 'st.cp_clamp', l: 'Fissaggi moduli su arcarecci', u: '€/mod', step: 0.5, show: nb }
+      ])
+    ]
+  });
+  const man = (s) => s.inv_preset !== 'auto';
+  g.push({
+    id: 'inv', title: 'Inverter e stringhe', sub: 'Dimensionamento automatico, valori forzabili', fields: [
+      { k: 'inv_preset', l: 'Inverter', t: 'sel', o: [['auto', 'Automatico: taglia scelta in base alla potenza'], ...opts(E.INV_PRESETS), ['custom', 'Personalizzato']], wide: true, h: 'In automatico viene scelta la taglia che rispetta stringhe e rapporto DC/AC al minor costo.' },
+      { k: 'inv.pac', l: 'Potenza nominale AC', u: 'kW', show: man }, { k: 'inv.price', l: 'Prezzo inverter', u: '€/pz', show: man },
+      { k: 'inv.mppt', l: 'Numero MPPT', u: 'n', show: man }, { k: 'inv.inp', l: 'Ingressi per MPPT', u: 'n', show: man },
+      { k: 'inv.vmax', l: 'Tensione max DC', u: 'V', show: man }, { k: 'inv.vac', l: 'Tensione AC', u: 'V', show: man },
+      { k: 'inv.vmin', l: 'MPPT minima', u: 'V', show: man }, { k: 'inv.vmaxm', l: 'MPPT massima', u: 'V', show: man },
+      { k: 'inv.imax', l: 'I max per MPPT', u: 'A', step: 0.1, show: man }, { k: 'inv.isc', l: 'Isc max per MPPT', u: 'A', step: 0.1, show: man },
+      { k: 'inv.iac', l: 'I max AC', u: 'A', step: 0.1, show: man },
+      { k: 'dcac_max', l: 'Rapporto DC/AC massimo', u: '', step: 0.01 },
+      { k: 'ns_override', l: 'Moduli per stringa', u: 'n', auto: (r) => r.d.Ns, h: '0 = automatico.' },
+      { k: 'ninv_override', l: 'Numero inverter', u: 'n', auto: (r) => r.d.Ninv, h: '0 = automatico.' }
+    ]
+  });
+  g.push({
+    id: 'cab', title: 'Cavi, percorsi e protezioni', sub: 'Lunghezze medie da sopralluogo', fields: [
+      { k: 'l_dc', l: 'Stringa → inverter (sola andata)', u: 'm' }, { k: 'l_extra', l: 'Cavo extra per stringa', u: 'm', h: 'Salti fila, ritorni, collegamenti tra file.' },
+      { k: 'dv_dc_max', l: 'ΔV max lato DC', u: '%', step: 0.1 }, { k: 'k_group_dc', l: 'Fattore di raggruppamento DC', u: '', step: 0.01 },
+      { k: 't_cab_dc', l: 'Temperatura conduttore DC', u: '°C' },
+      { k: 'l_ac1', l: 'Inverter → quadro di parallelo', u: 'm' }, { k: 'l_ac2', l: 'Quadro di parallelo → punto di connessione', u: 'm' },
+      { k: 'dv_ac_max', l: 'ΔV max per tratta AC', u: '%', step: 0.1 }, { k: 'k_group_ac', l: 'Fattore di raggruppamento AC', u: '', step: 0.01 },
+      { k: 't_amb', l: 'Temperatura ambiente posa AC', u: '°C' },
+      { k: 'cable_index', l: 'Indice prezzo rame', u: '×', step: 0.05, h: '1,00 = listino di riferimento.' },
+      { k: 'tray_dc', l: 'Passerella DC', u: 'm', auto: (r) => r.d.trayDC }, { k: 'tray_ac', l: 'Passerella AC', u: 'm', auto: (r) => r.d.trayAC },
+      { k: 'lps', l: 'Edificio/area con LPS (SPD tipo 1+2)', t: 'chk' },
+      ...(R ? [{ k: 'equip', l: 'Equipotenziale strutture', t: 'chk' }] : [])
+    ]
+  });
+  if (R) g.push({
+    id: 'sic', title: 'Sicurezza e noli in copertura', sub: 'D.Lgs. 81/08 Titolo IV', fields: [
+      { k: 'edge_pct', l: 'Bordi da proteggere', u: '%', h: 'Quota del perimetro senza parapetto fisso. Su impianti piccoli in tetti grandi proteggi solo la zona di lavoro.' },
+      { k: 'skylight_m2', l: 'Lucernari da proteggere', u: 'm²', blankNull: true, auto: (r) => nf(r.d.skylight, 0), h: 'Vuoto = 5% della copertura; 0 = nessuno.' },
+      { k: 'lifeline_m', l: 'Linea vita permanente', u: 'm', h: '0 = esistente o non richiesta.' },
+      { k: 'scaf_m', l: 'Ponteggio di facciata', u: 'm', h: 'Lunghezza di facciata; 0 = solo parapetti.' },
+      { k: 'towers', l: 'Torri scala di accesso', u: 'pz', auto: (r) => r.d.towers, h: '0 = una ogni 3.000 m².' },
+      { k: 'lift', l: 'Sollevamento materiali', t: 'sel', o: [['gru', 'Autogru'], ['montacarichi', 'Montacarichi']] },
+      { k: 'ple', l: 'Piattaforma aerea (PLE)', t: 'chk' }
+    ]
+  });
+  return g;
+}
+const COMMON_GROUPS = [
+  { id: 'clima', title: 'Località e clima', sub: 'Valgono per tutte le sezioni', open: true, fields: [
+    { k: 't_min', l: 'Temperatura minima di sito', u: '°C', h: 'Determina la Voc massima di stringa.' }, { k: 't_max', l: 'Temperatura massima cella', u: '°C' },
+    { k: 'snow_zone', l: 'Zona di carico neve', t: 'sel', o: [['I-A', 'I · Alpina'], ['I-M', 'I · Mediterranea'], ['II', 'II'], ['III', 'III']] },
+    { k: 'altitude', l: 'Quota del sito', u: 'm s.l.m.' }
+  ] },
+  { id: 'conn', title: 'Connessione e quadri di sito', sub: 'Un solo punto di connessione · CEI 0-21 / CEI 0-16', open: true, fields: [
+    { k: 'conn', l: 'Connessione', t: 'sel', o: [['auto', 'Automatica sul totale di sito (BT fino a 100 kW, poi MT)'], ['BT', 'BT · CEI 0-21'], ['MT', 'MT · CEI 0-16 (cabina utente)']], wide: true },
+    { k: 'cci', l: 'Controllore Centrale d\'Impianto', t: 'sel', o: [['auto', 'Automatico (≥ 100 kW in MT)'], ['si', 'Sì'], ['no', 'No']], show: (s) => s.conn !== 'BT' },
+    { k: 'new_trafo', l: 'Nuovo trasformatore dedicato', t: 'chk', show: (s) => s.conn !== 'BT' },
+    { k: 'vvf', l: 'Sgancio di emergenza e pratica VVF', t: 'chk' },
+    { k: 'monitor', l: 'Monitoraggio', t: 'chk' },
+    { k: 'bess_kwh', l: 'Accumulo di sito', u: 'kWh' },
+    { k: 'conn_cost', l: 'Corrispettivo di connessione', u: '€', h: 'Dal preventivo del distributore, se noto.' }
+  ] },
+  { id: 'mdo', title: 'Squadra e trasferte', sub: 'Stessa squadra per tutte le sezioni', fields: [
+    { k: 'team', l: 'Persone in squadra', u: 'n' }, { k: 'h_day', l: 'Ore al giorno', u: 'h' },
+    { k: 'cost_h', l: 'Costo orario elettricisti', u: '€/h', step: 0.5 },
+    { k: 'carp_cost_h', l: 'Costo orario carpentieri (pensiline)', u: '€/h', step: 0.5 },
+    { k: 'km', l: 'Distanza cantiere (sola andata)', u: 'km' }, { k: 'eur_km', l: 'Costo chilometrico', u: '€/km', step: 0.01 },
+    { k: 'trasf_pp', l: 'Trasferta (vitto e alloggio)', u: '€/gg·pers' }
+  ] },
+  { id: 'eco', title: 'Progettazione e condizioni economiche', sub: 'Una volta per sito', fields: [
+    { k: 'prog_el', l: 'Progetto elettrico esecutivo', t: 'chk' },
+    { k: 'lightning_doc', l: 'Valutazione rischio fulminazione', t: 'chk' },
+    { k: 'dl', l: 'Direzione lavori', t: 'chk' },
+    { k: 'coord_pct', l: 'Coordinamento sicurezza', u: '% lavori', step: 0.1, h: 'Obbligatorio con più imprese in cantiere (art. 90 D.Lgs. 81/08). 0 = escluso.' },
+    { k: 'disc_mat', l: 'Sconto medio su listino materiali', u: '%', step: 0.5 },
+    { k: 'transport', l: 'Trasporto materiali', u: '% mat.', step: 0.5 },
+    { k: 'contingency', l: 'Imprevisti', u: '%', step: 0.5 }
+  ] }
+];
+
+/* ================= Campi: lettura/scrittura ================= */
+const getK = (o, k) => k.includes('.') ? (o[k.split('.')[0]] || {})[k.split('.')[1]] : o[k];
+const setK = (o, k, v) => { if (k.includes('.')) { const [a, b] = k.split('.'); o[a][b] = v; } else o[k] = v; };
+const fid = (scope, k, f) => `f_${scope}_${k.replace('.', '_')}${f && f.id2 ? '_' + f.id2 : ''}`;
+let FORM = null; // { scope, fields, obj(), res() }
+
+function fieldHTML(f, o, scope) {
+  const id = fid(scope, f.k, f); const v = getK(o, f.k);
+  const help = f.h ? `<span class="help">${esc(f.h)}</span>` : '';
+  const da = `data-k="${f.k}" data-scope="${scope}"`;
+  if (f.t === 'chk') return `<label class="fld chk" data-row for="${id}"><input type="checkbox" id="${id}" ${da} ${v ? 'checked' : ''}><span>${esc(f.l)}</span>${help}</label>`;
+  if (f.t === 'sel') return `<div class="fld${f.wide ? ' wide' : ''}" data-row><label for="${id}">${esc(f.l)}</label><select id="${id}" ${da}>${f.o.map(([ov, ol]) => `<option value="${esc(ov)}" ${String(v) === ov ? 'selected' : ''}>${esc(ol)}</option>`).join('')}</select>${help}${f.src ? `<span class="help src" id="src_${scope}"></span>` : ''}</div>`;
+  if (f.t === 'text') return `<div class="fld wide" data-row><label for="${id}">${esc(f.l)}</label><input type="text" id="${id}" ${da} value="${esc(v ?? '')}">${help}</div>`;
+  const val = (v === null || v === undefined || (f.auto && v === 0)) ? '' : v;
+  return `<div class="fld" data-row><label for="${id}">${esc(f.l)}</label><div class="inp"><input type="number" inputmode="decimal" id="${id}" ${da} step="${f.step || 1}" value="${val}"><span class="u">${esc(f.u || '')}</span></div>${help}${f.rng ? `<span class="help src" data-rng="${id}"></span>` : ''}</div>`;
+}
+function buildForm(container, groups, scope, objFn, resFn) {
+  const o = objFn(); const openState = store.get(K_OPEN, {});
+  const fields = [];
+  const keyOf = (gid) => (scope === 'c' ? 'c' : (curSec() ? curSec().mode : 'x')) + ':' + gid;
+  container.innerHTML = groups.map(g => {
+    const isOpen = openState[keyOf(g.id)] !== undefined ? openState[keyOf(g.id)] : !!g.open;
+    return `<details class="sec" data-g="${g.id}" ${isOpen ? 'open' : ''}><summary><span class="sec-t">${esc(g.title)}</span><span class="sec-s">${esc(g.sub)}</span></summary>
+      <div class="fgrid">${g.fields.map(f => { fields.push(f); return fieldHTML(f, o, scope); }).join('')}</div></details>`;
+  }).join('');
+  $$('details.sec', container).forEach(el => el.addEventListener('toggle', () => { const st = store.get(K_OPEN, {}); st[keyOf(el.dataset.g)] = el.open; store.set(K_OPEN, st); }));
+  FORM = { scope, fields, obj: objFn, res: resFn };
+  refreshVisibility();
+}
+function refreshVisibility() {
+  if (!FORM) return; const o = FORM.obj(); if (!o) return;
+  for (const f of FORM.fields) { const el = document.getElementById(fid(FORM.scope, f.k, f)); const row = el && el.closest('[data-row]'); if (row) row.hidden = f.show ? !f.show(o) : false; }
+}
+function syncForm() {
+  if (!FORM) return; const o = FORM.obj(); if (!o) return;
+  for (const f of FORM.fields) {
+    const el = document.getElementById(fid(FORM.scope, f.k, f)); if (!el || el === document.activeElement) continue;
+    const v = getK(o, f.k);
+    if (f.t === 'chk') el.checked = !!v; else if (f.t === 'sel' || f.t === 'text') el.value = v ?? '';
+    else el.value = (v === null || v === undefined || (f.auto && v === 0)) ? '' : v;
+  }
+}
+function refreshAuto() {
+  if (!FORM) return; const r = FORM.res(); const o = FORM.obj(); if (!r || !o || r.failed) return;
+  for (const f of FORM.fields) {
+    if (!f.auto) continue; const el = document.getElementById(fid(FORM.scope, f.k, f)); if (!el) continue;
+    try { el.placeholder = 'auto ' + f.auto(r, o); } catch (e) {}
+  }
+  $$('[data-rng]').forEach(el => { const a = r.d.stAuto; if (!a) return; el.textContent = `Mercato: ${nf(a.kwp, 0)} €/kWp (intervallo ${nf(a.lo, 0)}–${nf(a.hi, 0)})` + (a.sizeK !== 1 ? ` · fattore taglia ${nf(a.sizeK, 2)}` : '') + (a.snowK ? ` · fattore neve ${nf(a.snowK, 2)}` : ''); });
+  const ms = document.getElementById('src_' + FORM.scope); if (ms && o.mod) ms.textContent = o.mod.src ? 'Fonte: ' + o.mod.src : 'Valori inseriti a mano';
+}
+
+function onField(el) {
+  const k = el.dataset.k, scope = el.dataset.scope; const s = site(); if (!s) return;
+  const o = scope === 'c' ? s.common : (s.sections.find(x => x.id === scope) || {}).state; if (!o) return;
+  const f = FORM && FORM.fields.find(x => x.k === k);
+  let v;
+  if (el.type === 'checkbox') v = el.checked;
+  else if (el.tagName === 'SELECT' || el.type === 'text') v = el.value;
+  else { v = el.value === '' ? (f && f.blankNull ? null : 0) : parseFloat(el.value); if (Number.isNaN(v)) return; }
+  if (k === 'mod_preset') { if (v !== 'custom') { o.mod = clone(E.MOD_PRESETS[v]); } o.mod_preset = v; syncForm(); }
+  else if (k === 'inv_preset') { if (v !== 'custom' && v !== 'auto') o.inv = clone(E.INV_PRESETS[v]); o.inv_preset = v; syncForm(); }
+  else if (k === 'st.bunit') {
+    const r = secRes(scope); const d = r ? r.d : null; const key = (curSec() && curSec().mode === 'carport') ? 'bval_cp' : 'bval';
+    const qty = (u) => d ? ({ kwp: d.Pdc, mod: d.Nmod, corpo: 1, m2: d.Acov || 0 }[u] || d.Pdc) : 1;
+    if (o.st[key] > 0 && d) { const tot = o.st[key] * qty(o.st.bunit); o.st.bunit = v; o.st[key] = +(tot / Math.max(qty(v), 1e-9)).toFixed(v === 'corpo' ? 0 : 2); const bi = document.getElementById(fid(scope, 'st.' + key)); if (bi) bi.value = o.st[key]; }
+    else o.st.bunit = v;
+  } else {
+    if (k === 'mod.p' && o.mod.p > 0 && v > 0) { o.mod.price = +(o.mod.price * v / o.mod.p).toFixed(2); const pe = document.getElementById(fid(scope, 'mod.price')); if (pe) pe.value = o.mod.price; }
+    setK(o, k, v);
+    if (k.startsWith('mod.') && k !== 'mod.name' && k !== 'mod.price') { o.mod_preset = 'custom'; o.mod.src = ''; const e2 = document.getElementById(fid(scope, 'mod_preset')); if (e2) e2.value = 'custom'; }
+    if (k.startsWith('inv.') && k !== 'inv.price') { o.inv_preset = 'custom'; const e2 = document.getElementById(fid(scope, 'inv_preset')); if (e2) e2.value = 'custom'; }
+  }
+  refreshVisibility(); touch(); update();
+}
+
+/* ================= Navigazione ================= */
+function go(view, siteId, tab) {
+  app.view = view; if (siteId !== undefined) app.siteId = siteId; if (tab !== undefined) app.tab = tab;
+  if (view === 'site' && !site()) app.view = 'home';
+  store.set(K_UI, { view: app.view, siteId: app.siteId, tab: app.tab });
+  render(); window.scrollTo(0, 0);
+}
+function render() {
+  $('#vHome').hidden = app.view !== 'home'; $('#vSite').hidden = app.view !== 'site';
+  $('#btnHome').hidden = app.view !== 'site'; $('#btnPrint').hidden = app.view !== 'site'; $('#printMenu').hidden = true;
+  $('#crumb').innerHTML = app.view === 'site' && site() ? `<span class="sep">/</span><span class="crumbsite">${esc(site().name)}</span>` : '';
+  if (app.view === 'home') renderHome(); else renderSite();
+  renderStatus();
+}
+
+/* ================= Elenco siti ================= */
+function siteSummary(s) { try { const r = E.computeSite(s); return { kwp: r.sd.pdc, cost: r.tot.cost, price: r.tot.price, conn: r.sd.conn, err: r.checks.filter(c => c.lvl === 'err').length }; } catch (e) { return { kwp: 0, cost: 0, price: 0, conn: '—', err: 1 }; } }
+function renderHome() {
+  const q = app.filter.trim().toLowerCase();
+  const list = app.sites.filter(s => !q || [s.name, s.location, s.client].join(' ').toLowerCase().includes(q)).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  let tk = 0, tc = 0, tp = 0;
+  const rows = list.map(s => {
+    const m = siteSummary(s); tk += m.kwp; tc += m.cost; tp += m.price;
+    const nR = s.sections.filter(x => x.mode === 'roof').length, nC = s.sections.length - nR;
+    return `<tr><td><button class="lnk" data-open="${s.id}">${esc(s.name)}</button>${m.err ? ' <span class="pill err">' + m.err + ' err.</span>' : ''}<small>${esc(s.client || '')}</small></td>
+      <td>${esc(s.location || '—')}</td><td>${nR ? nR + ' tetto' + (nR > 1 ? 'i' : '') : ''}${nR && nC ? ' · ' : ''}${nC ? nC + ' pensilin' + (nC > 1 ? 'e' : 'a') : ''}${!s.sections.length ? '—' : ''}</td>
+      <td class="num">${nf(m.kwp, 1)}</td><td>${m.conn}</td><td class="num">${eur(m.cost)}</td><td class="num">${eur(m.price)}</td><td class="num">${m.kwp > 0 ? nf(m.price / m.kwp, 0) : '—'}</td>
+      <td class="muted">${fmtDate(s.updated)}</td>
+      <td class="acts-cell"><button class="btn sm" data-open="${s.id}">Apri</button><button class="btn sm ghost" data-dup="${s.id}">Duplica</button><button class="btn sm ghost" data-del="${s.id}">Elimina</button></td></tr>`;
+  }).join('');
+  $('#sitesTable').innerHTML = `<thead><tr><th>Sito</th><th>Località</th><th>Sezioni</th><th class="num">kWp</th><th>Conn.</th><th class="num">Costo</th><th class="num">Prezzo</th><th class="num">€/kWp</th><th>Aggiornato</th><th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="10" class="empty">${app.sites.length ? 'Nessun sito corrisponde alla ricerca.' : 'Nessun sito: crea il primo con "Nuovo sito".'}</td></tr>`}</tbody>
+    ${list.length > 1 ? `<tfoot><tr><td colspan="3">Totale ${list.length} siti</td><td class="num">${nf(tk, 1)}</td><td></td><td class="num">${eur(tc)}</td><td class="num">${eur(tp)}</td><td class="num">${tk > 0 ? nf(tp / tk, 0) : '—'}</td><td colspan="2"></td></tr></tfoot>` : ''}`;
+}
+
+/* ================= Sito ================= */
+function renderSite() {
+  const s = site(); if (!s) return go('home');
+  $('#sName').value = s.name; $('#sLoc').value = s.location || ''; $('#sClient').value = s.client || ''; $('#sNotes').value = s.notes || '';
+  if (app.tab !== 'recap' && app.tab !== 'common' && !curSec()) app.tab = 'recap';
+  app.R = E.computeSite(s);
+  renderTabs();
+  const form = $('#form');
+  if (app.tab === 'common') { buildForm(form, COMMON_GROUPS, 'c', () => site().common, () => null); }
+  else if (app.tab === 'recap') { FORM = null; form.innerHTML = ''; }
+  else { const sec = curSec(); buildForm(form, secGroups(sec.mode), sec.id, () => (curSec() || {}).state, () => secRes(app.tab)); }
+  $('#secBar').hidden = !curSec();
+  if (curSec()) { $('#secName').value = curSec().name; $('#secType').textContent = curSec().mode === 'roof' ? 'Tetto' : 'Pensilina'; }
+  update(true);
+}
+function renderTabs() {
+  const s = site(); const R = app.R;
+  const chip = (id, label, sub, cls) => `<button class="tabchip ${cls || ''}${app.tab === id ? ' on' : ''}" data-tab="${id}" type="button"><b>${esc(label)}</b>${sub ? `<span>${sub}</span>` : ''}</button>`;
+  const secChips = s.sections.map(x => { const r = R && R.res.find(y => y.sec.id === x.id); const err = r && r.checks.some(c => c.lvl === 'err'); return chip(x.id, x.name, `${x.mode === 'roof' ? 'Tetto' : 'Pensilina'} · ${nf(r ? r.d.Pdc : 0, 1)} kWp${err ? ' · errore' : ''}`, (x.mode === 'roof' ? 'roof' : 'carport') + (err ? ' haserr' : '')); }).join('');
+  $('#tabs').innerHTML = chip('recap', 'Riepilogo sito', `${nf(R ? R.sd.pdc : 0, 1)} kWp`) + chip('common', 'Dati comuni', R ? `${R.sd.conn} · squadra ${s.common.team}` : '') + secChips +
+    `<span class="addsec"><button class="btn sm" data-add="roof" type="button">+ Tetto</button><button class="btn sm" data-add="carport" type="button">+ Pensilina</button></span>`;
+}
+function update(fromRender) {
+  const s = site(); if (!s) return;
+  if (!fromRender) app.R = E.computeSite(s);
+  const R = app.R;
+  refreshAuto(); renderAside(R);
+  if (!fromRender) renderTabs();
+  const L = $('#lower');
+  if (app.tab === 'recap') { $('#form').innerHTML = recapTableHTML(R); L.innerHTML = boqBlock('Costi comuni di sito', 'Connessione, pratiche, cantiere e coordinamento: contati una sola volta.', R.items, 'c', site().common.ov, R.tot, true) + checksBlock(R.checks, true); }
+  else if (app.tab === 'common') L.innerHTML = boqBlock('Costi comuni di sito', 'Calcolati sulla potenza totale del sito. Prezzi unitari modificabili.', R.items, 'c', site().common.ov, R.tot, true) + checksBlock(R.siteChecks, false);
+  else {
+    const r = secRes(app.tab); const sec = curSec();
+    if (!r || !sec) L.innerHTML = '';
+    else L.innerHTML = `<div class="two"><div>${checksBlock([...r.checks, ...R.siteChecks], false)}</div><div>${dimsBlock(r, Object.assign({}, s.common, sec.state))}</div></div>` +
+      boqBlock(`Computo · ${sec.name}`, 'Costi diretti della sezione. I costi comuni sono nel Riepilogo sito.', r.items, sec.id, sec.state.ov, null, false);
+  }
+  renderRecap(R);
+}
+
+/* ---------- riepilogo laterale ---------- */
+function renderAside(R) {
+  const { sd, tot } = R; const c = site().common;
+  const nR = R.res.filter(r => r.sec.mode === 'roof').length, nC = R.res.length - nR;
+  $('#kpis').innerHTML = [
+    ['Potenza DC sito', nf(sd.pdc, 1), 'kWp'],
+    ['Sezioni', String(R.res.length), `${nR} tett${nR === 1 ? 'o' : 'i'} · ${nC} pensilin${nC === 1 ? 'a' : 'e'}`],
+    ['Connessione', sd.conn, `${nf(sd.pac, 1)} kW AC${c.conn === 'auto' ? ' · auto' : ''}`],
+    ['Inverter', String(sd.ninv), `${nf(sd.nmod)} moduli`]
+  ].map(([l, v, u]) => `<div class="kpi"><span class="kl">${l}</span><span class="kv">${v}</span><span class="ku">${u}</span></div>`).join('');
+  const cats = [...E.CAT_ORDER_ALL, 'Trasporto materiali', 'Imprevisti'].filter(k => R.byCat[k] > 0.5);
+  const max = Math.max(1, ...cats.map(k => R.byCat[k]));
+  $('#cats').innerHTML = cats.map(k => `<li><span class="cn">${esc(k)}</span><span class="cv">${eur(R.byCat[k])}</span><span class="cp">${nf(R.byCat[k] / Math.max(tot.cost, 1) * 100, 1)}%</span><span class="cbar"><i style="width:${(R.byCat[k] / max * 100).toFixed(1)}%"></i></span></li>`).join('');
+  $('#costTot').textContent = eur(tot.cost);
+  $('#costWp').textContent = nf(tot.costKw, 0) + ' €/kWp';
+  const mk = $('#markup'), pr = $('#price');
+  if (document.activeElement !== mk) mk.value = (+tot.markup).toFixed(1);
+  if (document.activeElement !== pr) pr.value = Math.round(tot.price);
+  $('#priceWp').textContent = nf(tot.priceKw, 0) + ' €/kWp';
+  $('#margin').textContent = nf(tot.margin, 1) + '%';
+  $('#profit').textContent = eur(tot.profit);
+  $('#mode-note').textContent = c.price_mode === 'price' ? 'Prezzo imposto: il markup è ricalcolato' : 'Markup imposto: il prezzo è ricalcolato';
+  const errs = R.checks.filter(x => x.lvl === 'err').length, warns = R.checks.filter(x => x.lvl === 'warn').length;
+  $('#chkSum').innerHTML = (errs ? `<span class="pill err">${errs} ${errs > 1 ? 'errori' : 'errore'}</span>` : `<span class="pill ok">Valido</span>`) + (warns ? ` <span class="pill warn">${warns} avvis${warns > 1 ? 'i' : 'o'}</span>` : '');
+}
+
+/* ---------- blocchi ---------- */
+function recapTableHTML(R) {
+  const { tot } = R;
+  const rows = R.res.map(r => `<tr><td><button class="lnk" data-tab="${r.sec.id}">${esc(r.sec.name)}</button>${r.checks.some(c => c.lvl === 'err') ? ' <span class="pill err">errore</span>' : ''}<small>${r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'} · ${nf(r.d.Nmod)} moduli · ${r.d.Ninv} × ${nf(r.d.I.pac)} kW</small></td>
+    <td class="num">${nf(r.d.Pdc, 1)}</td><td class="num">${eur(r.direct)}</td><td class="num muted">${eur(r.alloc - r.direct)}</td><td class="num">${eur(r.alloc)}</td><td class="num">${r.d.Pdc > 0 ? nf(r.alloc / r.d.Pdc, 0) : '—'}</td><td class="num">${eur(r.allocPrice)}</td><td class="num">${r.d.Pdc > 0 ? nf(r.allocPrice / r.d.Pdc, 0) : '—'}</td></tr>`).join('');
+  return `<section class="blk"><div class="blkhead"><div><h2>Sezioni del sito</h2><p>Costo diretto di ogni sezione più la quota dei costi comuni ripartita per kWp: serve a confrontare tetto e pensilina.</p></div></div>
+  <div class="tablewrap"><table class="grid compact"><thead><tr><th>Sezione</th><th class="num">kWp</th><th class="num">Diretto</th><th class="num">Quota comune</th><th class="num">Costo</th><th class="num">€/kWp</th><th class="num">Prezzo</th><th class="num">€/kWp</th></tr></thead>
+  <tbody>${rows || '<tr><td colspan="8" class="empty">Nessuna sezione: aggiungi un tetto o una pensilina con i pulsanti in alto.</td></tr>'}</tbody>
+  <tfoot><tr><td colspan="2">Costi comuni di sito</td><td class="num">${eur(tot.commonTot)}</td><td colspan="5" class="muted">compresi nelle quote</td></tr>
+  <tr><td colspan="2">Trasporto e imprevisti</td><td class="num">${eur(tot.transport + tot.contingency)}</td><td colspan="5" class="muted">compresi nelle quote</td></tr>
+  <tr class="tot"><td>Totale sito</td><td class="num">${nf(R.sd.pdc, 1)}</td><td></td><td></td><td class="num">${eur(tot.cost)}</td><td class="num">${nf(tot.costKw, 0)}</td><td class="num">${eur(tot.price)}</td><td class="num">${nf(tot.priceKw, 0)}</td></tr></tfoot></table></div></section>`;
+}
+const LVL = { err: 'Errore', warn: 'Avviso', ok: 'OK', info: 'Nota' };
+function checksBlock(list, withSec) {
+  const order = { err: 0, warn: 1, info: 2, ok: 3 };
+  const L = [...list].sort((a, b) => order[a.lvl] - order[b.lvl]);
+  const li = (c) => `<li class="chk-${c.lvl}"><span class="pill ${c.lvl}">${LVL[c.lvl]}</span><div><b>${c.sec && (withSec || c.sec === 'Sito') ? `<i class="tag">${esc(c.sec)}</i> ` : ''}${esc(c.title)}</b><span>${c.detail}</span>${c.ref ? `<em>${esc(c.ref)}</em>` : ''}</div></li>`;
+  const main = L.filter(c => c.lvl !== 'ok'), okL = L.filter(c => c.lvl === 'ok');
+  const nE = L.filter(c => c.lvl === 'err').length, nW = L.filter(c => c.lvl === 'warn').length;
+  return `<section class="blk"><div class="blkhead"><h2>Verifiche</h2><p>${nE ? nE + ' errori · ' : ''}${nW ? nW + ' avvisi · ' : ''}${okL.length} superate${withSec ? ' · tutte le sezioni e il sito' : ''}</p></div>
+  ${main.length ? `<ul class="checks">${main.map(li).join('')}</ul>` : ''}
+  ${okL.length ? `<details class="okfold"><summary>${okL.length} verifiche superate</summary><ul class="checks">${okL.map(li).join('')}</ul></details>` : ''}</section>`;
+}
+function dimsBlock(r, S) {
+  if (r.failed) return '<section class="blk"><div class="blkhead"><h2>Dimensionamento</h2></div><p>Calcolo non disponibile.</p></section>';
+  const d = r.d, I = d.I;
+  const rows = [
+    ['Inverter', `${d.Ninv} × ${I.name}${d.invAuto ? ' (automatico)' : ''}`],
+    ['Voc modulo a ' + S.t_min + ' °C', nf(d.VocTmin, 2) + ' V'],
+    ['Moduli per stringa ammessi', `${d.NsMin} – ${Math.min(d.NsMaxV, d.NsMaxM)}`],
+    ['Stringa scelta', `${d.Ns} moduli · Voc ${nf(d.VocStr, 0)} V · Vmpp ${nf(d.VmpStrMin, 0)}–${nf(d.VmpStrMax, 0)} V`],
+    ['Stringhe', `${d.Nstr} totali · max ${d.strPerInvMax} per inverter · ${d.npMppt} per MPPT`],
+    ['Rapporto DC/AC', nf(d.ratio, 2)],
+    ['Cavo DC', `H1Z2Z2-K ${d.dc.S} mm² · ${nf(d.mDC, 0)} m · ΔV ${nf(d.dc.dv, 2)}%`],
+    ['Linea inverter', `${d.ac1.n > 1 ? d.ac1.n + '× ' : ''}4×${d.ac1.S} mm² · In ${d.ac1.In} A · ΔV ${nf(d.ac1.dv, 2)}%`],
+    ['Linea verso connessione', `${d.ac2.n > 1 ? d.ac2.n + '× ' : ''}4×${d.ac2.S} mm² · In ${d.ac2.In} A · ΔV ${nf(d.ac2.dv, 2)}%${d.nSec > 1 ? ` · ${d.nSec} sezioni BT` : ''}`],
+    ['ΔV complessiva', nf(d.dvTot, 2) + '%'],
+    ['Durata stimata della sezione', `${d.daysTot} giorni · ${nf(d.hTot + (d.hSteel || 0), 0)} h`]
+  ];
+  if (r.sec.mode === 'roof') { rows.unshift(['Superficie utile', `${nf(d.Autil, 0)} m² (fattore ${nf(d.fill, 2)}) · max ${d.Nmax} moduli`]); rows.push(['Carico aggiunto', nf(d.loadKgm2, 1) + ' kg/m²']); }
+  else { rows.unshift(['Pensilina', `${d.stalls} stalli · ${d.wings} ${d.wings > 1 ? 'file' : 'fila'} × ${nf(d.Lrow, 1)} m · moduli in ${d.orient} · max ${d.Nmax}`]); rows.push(['Neve di progetto', `qsk ${nf(d.qsk, 2)} · qs ${nf(d.qs, 2)} kN/m²`]); rows.push(['Struttura', `${d.ncol} pilastri · ${nf(d.steelT, 1)} t acciaio (${nf(d.steelKgm2, 1)} kg/m²)`]); }
+  return `<section class="blk"><div class="blkhead"><h2>Dimensionamento</h2><p>Valori calcolati</p></div><dl class="dims">${rows.map(([a, b]) => `<div><dt>${esc(a)}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl></section>`;
+}
+function boqBlock(title, sub, items, scope, ov, tot, isCommon) {
+  const groups = [...E.CAT_ORDER_ALL];
+  let html = '';
+  for (const g of groups) {
+    const its = items.filter(i => i.cat === g); if (!its.length) continue;
+    const st = its.reduce((a, b) => a + b.tot, 0);
+    html += `<tbody><tr class="grp"><th colspan="4">${esc(g)}</th><th class="num">${eur(st)}</th></tr>` + its.map(i => `<tr${i.edited ? ' class="edited"' : ''}><td class="desc">${esc(i.desc)}${i.ref ? `<small>${esc(i.ref)}</small>` : ''}</td><td class="num">${nf(i.qty, i.qty % 1 ? 1 : 0)}</td><td class="um">${esc(i.um)}</td><td class="pu"><div class="puw"><input type="number" step="0.01" id="pu_${scope}_${i.id}" data-ov="${i.id}" data-scope="${scope}" value="${+(+i.unit).toFixed(2)}" aria-label="Prezzo unitario">${i.edited ? `<button class="rst" data-rst="${i.id}" data-scope="${scope}" title="Ripristina ${nf(i.def, 2)} €" type="button">↺</button>` : ''}</div></td><td class="num">${eur(i.tot)}</td></tr>`).join('') + '</tbody>';
+  }
+  const sum = items.reduce((a, b) => a + b.tot, 0);
+  const foot = isCommon && tot ? `<tbody class="foot"><tr><td colspan="4">Totale costi comuni</td><td class="num">${eur(sum)}</td></tr><tr><td colspan="4">Trasporto materiali (${nf(site().common.transport, 1)}% su ${eur(tot.sumMat)} di materiali di tutte le sezioni)</td><td class="num">${eur(tot.transport)}</td></tr><tr><td colspan="4">Imprevisti (${nf(site().common.contingency, 1)}%)</td><td class="num">${eur(tot.contingency)}</td></tr></tbody>`
+    : `<tbody class="foot"><tr class="tot"><td colspan="4">Totale costi diretti della sezione</td><td class="num">${eur(sum)}</td></tr></tbody>`;
+  const nEd = items.filter(i => i.edited).length;
+  return `<section class="blk"><div class="blkhead"><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div><div class="boqbar"><span class="muted">${nEd ? (nEd === 1 ? '1 prezzo modificato' : nEd + ' prezzi modificati') : 'Prezzi di riferimento'}</span>${nEd ? `<button class="btn sm" data-rstall="${scope}" type="button">Ripristina prezzi</button>` : ''}</div></div>
+  <div class="tablewrap"><table class="boq"><thead><tr><th>Voce</th><th class="num">Q.tà</th><th>U.M.</th><th class="num">Prezzo unit. €</th><th class="num">Totale</th></tr></thead>${html}${foot}</table></div></section>`;
+}
+function renderRecap(R) {
+  const t = R.tot, kw = R.sd.pdc;
+  const cell = (cls, l, v, n) => `<div class="${cls}"><span class="rl">${l}</span><span class="rv">${v}</span>${n ? `<span class="rn">${n}</span>` : ''}</div>`;
+  $('#recap').innerHTML = [
+    cell('us', 'Costo per noi · totale', eur(t.cost), `di cui costi comuni ${eur(t.commonTot)}, imprevisti ${eur(t.contingency)}, trasporto ${eur(t.transport)}`),
+    cell('them', 'Prezzo al cliente · totale', eur(t.price), `markup ${nf(t.markup, 1)}% · margine ${nf(t.margin, 1)}% · utile ${eur(t.profit)}`),
+    cell('us', 'Costo per noi · per kW installato', nf(t.costKw, 0) + ' €/kWp', `${nf(kw, 1)} kWp installati`),
+    cell('them', 'Prezzo al cliente · per kW installato', nf(t.priceKw, 0) + ' €/kWp', `${nf(t.priceKw / 1000, 3)} €/Wp`),
+    cell('us', 'Oneri della sicurezza · costo per noi', eur(t.sic), `${nf(t.sic / Math.max(t.cost, 1) * 100, 1)}% del costo · coordinamento CSP/CSE compreso`),
+    cell('us', 'Progettazione · costo per noi', eur(t.design), `${nf(t.design / Math.max(t.cost, 1) * 100, 1)}% del costo · pratiche e oneri di connessione a parte: ${eur(t.pratiche)}`)
+  ].join('');
+  const s = site(); $('#recapSub').textContent = `${s.name}${s.location ? ' · ' + s.location : ''} · ${R.res.length} sezion${R.res.length === 1 ? 'e' : 'i'} · IVA esclusa`;
+}
+
+/* ================= Eventi ================= */
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (el.dataset && el.dataset.k && (el.type === 'number' || el.type === 'text')) return onField(el);
+  if (el.dataset && el.dataset.sk) { const s = site(); if (!s) return; s[el.dataset.sk] = el.value; touch(); if (el.dataset.sk === 'name') { $('#crumb').innerHTML = `<span class="sep">/</span><span class="crumbsite">${esc(s.name)}</span>`; } if (app.R) renderRecap(app.R); return; }
+  if (el.id === 'secName') { const sec = curSec(); if (sec) { sec.name = el.value; touch(); renderTabs(); } return; }
+  if (el.id === 'markup') { const v = parseFloat(el.value); if (Number.isNaN(v)) return; const c = site().common; c.markup = v; c.price_mode = 'markup'; touch(); update(); return; }
+  if (el.id === 'price') { const v = parseFloat(el.value); if (Number.isNaN(v) || v <= 0) return; const c = site().common; c.price = v; c.price_mode = 'price'; touch(); update(); return; }
+  if (el.id === 'siteSearch') { app.filter = el.value; renderHome(); }
+});
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.dataset && el.dataset.k && (el.tagName === 'SELECT' || el.type === 'checkbox')) return onField(el);
+  if (el.dataset && el.dataset.ov) {
+    const s = site(); const scope = el.dataset.scope; const id = el.dataset.ov; const v = parseFloat(el.value);
+    const items = scope === 'c' ? app.R.items : (secRes(scope) || { items: [] }).items;
+    const it = items.find(i => i.id === id);
+    const target = scope === 'c' ? s.common : (s.sections.find(x => x.id === scope) || {}).state; if (!target) return;
+    if (it && it.field) { if (!Number.isNaN(v)) setK(target, it.field, v); syncForm(); }
+    else { target.ov = target.ov || {}; if (el.value === '' || Number.isNaN(v) || (it && Math.abs(v - it.def) < 1e-9)) delete target.ov[id]; else target.ov[id] = v; }
+    touch(); update(); const again = document.getElementById(el.id); if (again) again.focus();
+  }
+  if (el.id === 'importFile' && el.files && el.files[0]) { const fr = new FileReader(); fr.onload = () => doImport(String(fr.result)); fr.readAsText(el.files[0]); el.value = ''; }
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.dataset && e.target.dataset.ov) e.target.blur(); });
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button'); if (!t) return;
+  const s = site();
+  if (t.id === 'navHome' || t.id === 'btnHome') return go('home');
+  if (t.id === 'btnPrint') { const m = $('#printMenu'); m.hidden = !m.hidden; return; }
+  if (t.id === 'btnPrintRecap' || t.id === 'pmRecap') { $('#printMenu').hidden = true; return printSite(false); }
+  if (t.id === 'btnPrintFull' || t.id === 'pmFull') { $('#printMenu').hidden = true; return printSite(true); }
+  if (t.id === 'bkPill' || t.id === 'btnBackup') { const p = $('#backup'); p.hidden = !p.hidden; $('#bkSite').hidden = !(app.view === 'site' && s); return; }
+  if (t.dataset.open) return go('site', t.dataset.open, 'recap');
+  if (t.dataset.tab) return go('site', app.siteId, t.dataset.tab);
+  if (t.id === 'btnNewSite') { const n = D.newSite('Nuovo sito ' + (app.sites.length + 1)); n.sections.push(D.newSection('roof', 'Tetto 1')); app.sites.push(n); app.siteId = n.id; touch(); toast('Sito creato: compila nome, località e sezioni'); return go('site', n.id, n.sections[0].id); }
+  if (t.dataset.dup && !t.closest('#secBar')) { const src = app.sites.find(x => x.id === t.dataset.dup); if (!src) return; const c = clone(src); c.id = D.uid(); c.name = src.name + ' (copia)'; c.sections.forEach(x => x.id = D.uid()); c.updated = Date.now(); app.sites.push(c); saveNow(); renderHome(); toast('Sito duplicato'); return; }
+  if (t.dataset.del && !t.closest('#secBar')) { if (!t.dataset.confirm) return armConfirm(t); app.sites = app.sites.filter(x => x.id !== t.dataset.del); if (app.siteId === t.dataset.del) app.siteId = null; saveNow(); renderHome(); toast('Sito eliminato'); return; }
+  if (t.dataset.add && s) { const n = s.sections.filter(x => x.mode === t.dataset.add).length + 1; const sec = D.newSection(t.dataset.add, (t.dataset.add === 'roof' ? 'Tetto ' : 'Pensilina ') + n); if (t.dataset.add === 'carport') sec.state.stalls = 40; else sec.state.kwp_target = 0; s.sections.push(sec); touch(); toast('Sezione aggiunta'); return go('site', s.id, sec.id); }
+  if (t.id === 'secDup' && s && curSec()) { const c = clone(curSec()); c.id = D.uid(); c.name = curSec().name + ' (copia)'; const i = s.sections.indexOf(curSec()); s.sections.splice(i + 1, 0, c); touch(); toast('Sezione duplicata'); return go('site', s.id, c.id); }
+  if (t.id === 'secDel' && s && curSec()) { if (!t.dataset.confirm) return armConfirm(t); s.sections = s.sections.filter(x => x.id !== app.tab); touch(); toast('Sezione eliminata'); return go('site', s.id, 'recap'); }
+  if ((t.id === 'secLeft' || t.id === 'secRight') && s && curSec()) { const i = s.sections.indexOf(curSec()); const j = t.id === 'secLeft' ? i - 1 : i + 1; if (j < 0 || j >= s.sections.length) return; [s.sections[i], s.sections[j]] = [s.sections[j], s.sections[i]]; touch(); renderTabs(); return; }
+  if ((t.id === 'secPrev' || t.id === 'secNext') && s && curSec()) { const i = s.sections.indexOf(curSec()); const j = t.id === 'secPrev' ? i - 1 : i + 1; if (j < 0) return go('site', s.id, 'common'); if (j >= s.sections.length) return go('site', s.id, 'recap'); return go('site', s.id, s.sections[j].id); }
+  if (t.dataset.rst) { const target = t.dataset.scope === 'c' ? s.common : (s.sections.find(x => x.id === t.dataset.scope) || {}).state; if (target && target.ov) delete target.ov[t.dataset.rst]; touch(); return update(); }
+  if (t.dataset.rstall) { const target = t.dataset.rstall === 'c' ? s.common : (s.sections.find(x => x.id === t.dataset.rstall) || {}).state; if (target) target.ov = {}; touch(); return update(); }
+  if (t.id === 'btnCopyAll' && app.R) return copyText(boqTSV(app.R), 'Computo completo copiato: incollalo in Excel');
+  if (t.id === 'btnCopyRecap' && app.R) return copyText(recapTSV(app.R), 'Riepilogo copiato');
+  if (t.id === 'bkDownload') return exportBackup(false);
+  if (t.id === 'bkSite') return exportBackup(true);
+  if (t.id === 'bkCopy') { const txt = backupText(false); copyText(txt, 'Backup copiato negli appunti'); markBackup(); return; }
+  if (t.id === 'bkImport') return doImport($('#importTxt').value);
+});
+/* ================= Stampa ================= */
+function printSite(full) {
+  const s = site(); if (!s) return; const R = E.computeSite(s); const t = R.tot; const C = s.common;
+  const today = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
+  const cell = (l, v, n) => `<div><span class="l">${l}</span><span class="v">${v}</span>${n ? `<span class="n">${n}</span>` : ''}</div>`;
+  const errs = R.checks.filter(c => c.lvl === 'err'), warns = R.checks.filter(c => c.lvl === 'warn');
+  let h = `<div class="pr-head"><div><h1>${esc(s.name)}</h1><div>${esc(s.location || '')}${s.client ? ' · Cliente: ' + esc(s.client) : ''}</div></div>
+    <div class="meta">Stima di costo impianto fotovoltaico<br>${today}<br>Documento interno · IVA esclusa</div></div>
+    <p class="pr-sub">${nf(R.sd.pdc, 1)} kWp DC · ${nf(R.sd.pac, 1)} kW AC · connessione ${R.sd.conn}${C.conn === 'auto' ? ' (automatica)' : ''} · ${R.res.length} sezion${R.res.length === 1 ? 'e' : 'i'} · ${nf(R.sd.nmod)} moduli · ${R.sd.ninv} inverter · durata stimata ${R.sd.daysTot} giorni lavorativi</p>
+    <div class="pr-grid">
+      ${cell('Costo per noi · totale', eur(t.cost), `costi comuni ${eur(t.commonTot)} · imprevisti ${eur(t.contingency)} · trasporto ${eur(t.transport)}`)}
+      ${cell('Prezzo al cliente · totale', eur(t.price), `markup ${nf(t.markup, 1)}% · margine ${nf(t.margin, 1)}% · utile ${eur(t.profit)}`)}
+      ${cell('Oneri della sicurezza', eur(t.sic), `${nf(t.sic / Math.max(t.cost, 1) * 100, 1)}% del costo`)}
+      ${cell('Costo per noi · per kWp', nf(t.costKw, 0) + ' €/kWp', `${nf(R.sd.pdc, 1)} kWp installati`)}
+      ${cell('Prezzo al cliente · per kWp', nf(t.priceKw, 0) + ' €/kWp', `${nf(t.priceKw / 1000, 3)} €/Wp`)}
+      ${cell('Progettazione', eur(t.design), `pratiche e connessione a parte: ${eur(t.pratiche)}`)}
+    </div>`;
+  if (errs.length || warns.length) h += `<div class="pr-warn"><b>Verifiche aperte:</b> ${[...errs, ...warns].map(c => `${c.sec ? esc(c.sec) + ' – ' : ''}${esc(c.title)}`).join(' · ')}</div>`;
+  h += `<h2>Sezioni</h2><table><thead><tr><th>Sezione</th><th>Tipo</th><th class="n">kWp</th><th class="n">Moduli</th><th>Inverter</th><th class="n">Costo diretto</th><th class="n">Quota comune</th><th class="n">Costo</th><th class="n">€/kWp</th><th class="n">Prezzo</th></tr></thead><tbody>` +
+    R.res.map(r => `<tr><td>${esc(r.sec.name)}</td><td>${r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'}</td><td class="n">${nf(r.d.Pdc, 1)}</td><td class="n">${nf(r.d.Nmod)}</td><td>${r.d.Ninv} × ${nf(r.d.I.pac)} kW</td><td class="n">${eur(r.direct)}</td><td class="n">${eur(r.alloc - r.direct)}</td><td class="n">${eur(r.alloc)}</td><td class="n">${r.d.Pdc > 0 ? nf(r.alloc / r.d.Pdc, 0) : '—'}</td><td class="n">${eur(r.allocPrice)}</td></tr>`).join('') +
+    `<tr class="t"><td colspan="2">Totale sito</td><td class="n">${nf(R.sd.pdc, 1)}</td><td class="n">${nf(R.sd.nmod)}</td><td>${R.sd.ninv} inverter</td><td class="n">${eur(R.res.reduce((a, r) => a + r.direct, 0))}</td><td class="n">${eur(t.commonTot + t.transport + t.contingency)}</td><td class="n">${eur(t.cost)}</td><td class="n">${nf(t.costKw, 0)}</td><td class="n">${eur(t.price)}</td></tr></tbody></table>`;
+  const cats = [...E.CAT_ORDER_ALL, 'Trasporto materiali', 'Imprevisti'].filter(k => R.byCat[k] > 0.5);
+  h += `<h2>Costo per categoria</h2><table><thead><tr><th>Categoria</th><th class="n">Costo</th><th class="n">% sul costo</th><th class="n">€/kWp</th></tr></thead><tbody>` +
+    cats.map(k => `<tr><td>${esc(k)}</td><td class="n">${eur(R.byCat[k])}</td><td class="n">${nf(R.byCat[k] / Math.max(t.cost, 1) * 100, 1)}%</td><td class="n">${R.sd.pdc > 0 ? nf(R.byCat[k] / R.sd.pdc, 0) : '—'}</td></tr>`).join('') +
+    `<tr class="t"><td>Totale</td><td class="n">${eur(t.cost)}</td><td class="n">100%</td><td class="n">${nf(t.costKw, 0)}</td></tr></tbody></table>`;
+  h += `<h2>Ipotesi principali</h2><table><tbody>
+    <tr><td>Temperature di progetto</td><td>${C.t_min} °C / ${C.t_max} °C cella</td><td>Squadra</td><td>${C.team} persone × ${C.h_day} h · ${nf(C.cost_h, 1)} €/h</td></tr>
+    <tr><td>Neve (pensiline)</td><td>zona ${esc(C.snow_zone)} · ${C.altitude} m s.l.m.</td><td>Distanza cantiere</td><td>${C.km} km</td></tr>
+    <tr><td>Trasporto / imprevisti</td><td>${nf(C.transport, 1)}% / ${nf(C.contingency, 1)}%</td><td>Sconto materiali</td><td>${nf(C.disc_mat, 1)}%</td></tr>
+    ${R.res.map(r => `<tr><td>${esc(r.sec.name)}</td><td colspan="3">${esc(r.sec.state.mod ? r.sec.state.mod.name : '')} · ${r.sec.mode === 'roof' ? esc((E.ROOF_TYPES[r.sec.state.roof_type] || {}).name || '') : `${r.d.stalls || 0} stalli`} · struttura ${r.sec.state.st && r.sec.state.st.mode === 'budget' ? 'a budget' : 'scomposta'}${r.d.Ns ? ` · stringhe ${r.d.Nstr} × ${r.d.Ns}` : ''}</td></tr>`).join('')}
+  </tbody></table>`;
+  if (s.notes) h += `<h2>Note</h2><div class="pr-notes">${esc(s.notes)}</div>`;
+  if (full) {
+    const block = (title, items) => {
+      let b = `<div class="pr-sec"><h2>Computo · ${esc(title)}</h2><table><thead><tr><th>Voce</th><th class="n">Q.tà</th><th>U.M.</th><th class="n">Prezzo unit.</th><th class="n">Totale</th></tr></thead><tbody>`;
+      for (const g of E.CAT_ORDER_ALL) { const its = items.filter(i => i.cat === g); if (!its.length) continue;
+        b += `<tr class="g"><td colspan="4">${esc(g)}</td><td class="n">${eur(its.reduce((a, x) => a + x.tot, 0))}</td></tr>` + its.map(i => `<tr><td>${esc(i.desc)}</td><td class="n">${nf(i.qty, i.qty % 1 ? 1 : 0)}</td><td>${esc(i.um)}</td><td class="n">${nf(i.unit, 2)}</td><td class="n">${eur(i.tot)}</td></tr>`).join(''); }
+      return b + `<tr class="t"><td colspan="4">Totale</td><td class="n">${eur(items.reduce((a, x) => a + x.tot, 0))}</td></tr></tbody></table></div>`;
+    };
+    for (const r of R.res) h += block(r.sec.name, r.items);
+    h += block('Costi comuni di sito', R.items);
+    h += `<table><tbody><tr><td>Trasporto materiali (${nf(C.transport, 1)}%)</td><td class="n">${eur(t.transport)}</td></tr><tr><td>Imprevisti (${nf(C.contingency, 1)}%)</td><td class="n">${eur(t.contingency)}</td></tr><tr class="t"><td>Costo totale di commessa</td><td class="n">${eur(t.cost)}</td></tr><tr class="t"><td>Prezzo di vendita (markup ${nf(t.markup, 1)}%)</td><td class="n">${eur(t.price)}</td></tr></tbody></table>`;
+  }
+  h += `<div class="pr-foot">Preventivatore FV Industriale · stima parametrica: prezzi unitari di riferimento da sostituire con le quotazioni dei fornitori · ${today}</div>`;
+  $('#printArea').innerHTML = h;
+  const old = document.title; document.title = `${s.name} - stima FV ${new Date().toISOString().slice(0, 10)}`;
+  setTimeout(() => { try { window.print(); } catch (e) {} document.title = old; }, 50);
+  toast('Apertura stampa: scegli la stampante oppure "Salva come PDF".');
+}
+function armConfirm(b) { const txt = b.textContent; b.dataset.confirm = '1'; b.textContent = 'Conferma'; b.classList.add('danger'); setTimeout(() => { if (b.isConnected) { delete b.dataset.confirm; b.textContent = txt; b.classList.remove('danger'); } }, 3500); }
+
+/* ================= Copia, backup, import ================= */
+function boqTSV(R) {
+  const L = [['Sezione', 'Categoria', 'Voce', 'Q.tà', 'U.M.', 'Prezzo unitario', 'Totale'].join('\t')];
+  for (const i of R.allItems) L.push([i.secName, i.cat, i.desc, nf(i.qty, 2), i.um, nf(i.unit, 2), nf(i.tot, 2)].join('\t'));
+  L.push(['', '', 'Trasporto materiali', '', '', '', nf(R.tot.transport, 2)].join('\t'));
+  L.push(['', '', 'Imprevisti', '', '', '', nf(R.tot.contingency, 2)].join('\t'));
+  L.push(['', '', 'COSTO TOTALE', '', '', '', nf(R.tot.cost, 2)].join('\t'));
+  L.push(['', '', `PREZZO (markup ${nf(R.tot.markup, 1)}%)`, '', '', '', nf(R.tot.price, 2)].join('\t'));
+  return L.join('\n');
+}
+function recapTSV(R) {
+  const s = site(); const t = R.tot;
+  const L = [['Sito', s.name], ['Località', s.location || ''], ['kWp installati', nf(R.sd.pdc, 2)], ['Connessione', R.sd.conn], [],
+    ['Sezione', 'Tipo', 'kWp', 'Costo diretto', 'Quota comune', 'Costo', 'Prezzo']];
+  for (const r of R.res) L.push([r.sec.name, r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina', nf(r.d.Pdc, 2), nf(r.direct, 2), nf(r.alloc - r.direct, 2), nf(r.alloc, 2), nf(r.allocPrice, 2)]);
+  L.push([], ['Costo per noi totale', nf(t.cost, 2)], ['Prezzo al cliente totale', nf(t.price, 2)], ['Costo per noi €/kWp', nf(t.costKw, 2)], ['Prezzo al cliente €/kWp', nf(t.priceKw, 2)], ['Oneri della sicurezza', nf(t.sic, 2)], ['Progettazione', nf(t.design, 2)], ['Pratiche e connessione', nf(t.pratiche, 2)], ['Markup %', nf(t.markup, 2)], ['Margine %', nf(t.margin, 2)]);
+  return L.map(r => r.join('\t')).join('\n');
+}
+function backupText(onlySite) {
+  const sites = onlySite && site() ? [site()] : app.sites;
+  return JSON.stringify({ app: 'preventivatore-fv', schema: D.SCHEMA, exported: new Date().toISOString(), sites }, null, 1);
+}
+function markBackup() { if (app.sites.length) store.set(K_BACKUP, Date.now()); renderStatus(); }
+function exportBackup(onlySite) {
+  const txt = backupText(onlySite);
+  const d = new Date(); const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+  const name = onlySite && site() ? `pv-sito-${site().name.replace(/[^\w-]+/g, '_').slice(0, 40)}_${stamp}.json` : `pv-backup_${stamp}.json`;
+  try {
+    const blob = new Blob([txt], { type: 'application/json' }); const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  } catch (e) {}
+  if (!onlySite) markBackup();
+  $('#importTxt').value = txt;
+  toast('Backup scaricato. Se il download non parte, il testo è nel riquadro: copialo.');
+}
+function doImport(text) {
+  let o; try { o = JSON.parse(text); } catch (e) { return toast('File o testo non valido: serve un backup esportato da questo strumento.'); }
+  let list = Array.isArray(o) ? o : (o && Array.isArray(o.sites)) ? o.sites : (o && o.sections) ? [o] : null;
+  if (!list) return toast('Il backup non contiene siti.');
+  let added = 0, upd = 0, kept = 0;
+  for (const raw of list) {
+    const s = D.normalizeSite(raw); const i = app.sites.findIndex(x => x.id === s.id);
+    if (i < 0) { app.sites.push(s); added++; }
+    else if ((s.updated || 0) >= (app.sites[i].updated || 0)) { app.sites[i] = s; upd++; }
+    else kept++;
+  }
+  saveNow(); $('#importTxt').value = '';
+  toast(`Importati: ${added} nuovi, ${upd} aggiornati${kept ? `, ${kept} tenuti perché più recenti qui` : ''}.`);
+  render();
+}
+function copyText(t, msg) {
+  const fallback = () => { const ta = $('#importTxt'); $('#backup').hidden = false; ta.value = t; ta.focus(); ta.select(); toast('Copia automatica non consentita: testo selezionato nel riquadro Backup, usa Ctrl+C'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(() => toast(msg), fallback); else fallback();
+}
+let tt; function toast(m) { const el = $('#toast'); el.textContent = m; el.hidden = false; clearTimeout(tt); tt = setTimeout(() => el.hidden = true, 3200); }
+window.addEventListener('beforeunload', () => { clearTimeout(saveT); store.set(K_SITES, app.sites); });
+
+render();
+})();
+</script>
