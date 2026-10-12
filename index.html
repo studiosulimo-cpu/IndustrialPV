@@ -107,6 +107,12 @@ aside.sum{position:sticky;top:calc(env(safe-area-inset-top,0px) + 84px);display:
 .big{font-size:24px;font-weight:500}
 .sub{color:var(--muted);font-size:12.5px;text-align:right}
 .pricing{border:2px solid var(--accent);background:var(--surface)}
+.secshare{display:grid;gap:8px}
+.secshare .row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13.5px}
+.secshare .row b{font-family:var(--f-mono);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
+.secshare .row.tot{border-top:1px solid var(--line);padding-top:8px;font-weight:600}
+.secshare .row.tot b{font-size:17px}
+.secshare .note{font-size:12px;color:var(--muted)}
 .pbox{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:10px}
 .pbox label{min-width:0}
 .pbox label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
@@ -341,11 +347,12 @@ details.method .notes{margin-top:12px}
       <aside class="sum" aria-label="Totali del sito">
         <div class="kpis" id="kpis"></div>
         <div class="card">
-          <h2><span>Costo del sito per categoria</span><span id="chkSum"></span></h2>
+          <h2><span id="catTitle">Costo del sito per categoria</span><span id="chkSum"></span></h2>
           <ul id="cats"></ul>
-          <div class="costline"><b>Costo di commessa</b><div><div class="big" id="costTot">—</div><div class="sub" id="costWp"></div></div></div>
+          <div class="costline"><b id="costLabel">Costo di commessa</b><div><div class="big" id="costTot">—</div><div class="sub" id="costWp"></div></div></div>
         </div>
-        <div class="card pricing">
+        <div class="card secshare" id="secCard" hidden></div>
+        <div class="card pricing" id="priceCard">
           <div class="pbox">
             <label for="markup">Markup sul costo<span class="inp"><input id="markup" type="number" step="0.5" inputmode="decimal"><span class="u">%</span></span></label>
             <label for="price">Prezzo di vendita<span class="inp"><input id="price" type="number" step="100" inputmode="decimal"><span class="u">€</span></span></label>
@@ -1930,6 +1937,10 @@ function update(fromRender) {
 
 /* ---------- riepilogo laterale ---------- */
 function renderAside(R) {
+  const sec = curSec(); const r = sec ? secRes(sec.id) : null;
+  $('#secCard').hidden = !r; $('#priceCard').hidden = !!r;
+  if (r) return renderSecAside(R, r);
+  $('#catTitle').textContent = 'Costo del sito per categoria'; $('#costLabel').textContent = 'Costo di commessa';
   const { sd, tot } = R; const c = site().common;
   const nR = R.res.filter(r => r.sec.mode === 'roof').length, nC = R.res.length - nR;
   $('#kpis').innerHTML = [
@@ -1952,6 +1963,34 @@ function renderAside(R) {
   $('#mode-note').textContent = c.price_mode === 'price' ? 'Prezzo imposto: il markup è ricalcolato' : 'Markup imposto: il prezzo è ricalcolato';
   const errs = R.checks.filter(x => x.lvl === 'err').length, warns = R.checks.filter(x => x.lvl === 'warn').length;
   $('#chkSum').innerHTML = (errs ? `<span class="pill err">${errs} ${errs > 1 ? 'errori' : 'errore'}</span>` : `<span class="pill ok">Valido</span>`) + (warns ? ` <span class="pill warn">${warns} avvis${warns > 1 ? 'i' : 'o'}</span>` : '');
+}
+
+function renderSecAside(R, r) {
+  const d = r.d, sec = r.sec;
+  $('#kpis').innerHTML = [
+    ['Potenza DC sezione', nf(d.Pdc, 1), 'kWp'],
+    ['Moduli', nf(d.Nmod), `${d.Nstr || 0} stringhe × ${d.Ns || 0}`],
+    ['Inverter', `${d.Ninv} × ${nf(d.I ? d.I.pac : 0)}`, 'kW'],
+    ['Connessione di sito', R.sd.conn, `${nf(R.sd.pac, 1)} kW AC totali`]
+  ].map(([l, v, u]) => `<div class="kpi"><span class="kl">${l}</span><span class="kv">${v}</span><span class="ku">${u}</span></div>`).join('');
+  const by = {}; for (const it of r.items) by[it.cat] = (by[it.cat] || 0) + it.tot;
+  const cats = E.CAT_ORDER_ALL.filter(k => by[k] > 0.5); const max = Math.max(1, ...cats.map(k => by[k]));
+  $('#catTitle').textContent = `Costi diretti · ${sec.name}`;
+  $('#cats').innerHTML = cats.map(k => `<li><span class="cn">${esc(k)}</span><span class="cv">${eur(by[k])}</span><span class="cp">${nf(by[k] / Math.max(r.direct, 1) * 100, 1)}%</span><span class="cbar"><i style="width:${(by[k] / max * 100).toFixed(1)}%"></i></span></li>`).join('') || '<li class="muted">Nessun costo.</li>';
+  $('#costLabel').textContent = 'Costo diretto sezione';
+  $('#costTot').textContent = eur(r.direct);
+  $('#costWp').textContent = d.Pdc > 0 ? nf(r.direct / d.Pdc, 0) + ' €/kWp' : '';
+  const errs = r.checks.filter(x => x.lvl === 'err').length, warns = r.checks.filter(x => x.lvl === 'warn').length;
+  $('#chkSum').innerHTML = (errs ? `<span class="pill err">${errs} ${errs > 1 ? 'errori' : 'errore'}</span>` : `<span class="pill ok">Valido</span>`) + (warns ? ` <span class="pill warn">${warns} avvis${warns > 1 ? 'i' : 'o'}</span>` : '');
+  const share = r.alloc - r.direct, kw = d.Pdc > 0 ? d.Pdc : 0;
+  $('#secCard').innerHTML = `<h2><span>Sezione con quota di sito</span></h2>
+    <div class="row"><span>Costo diretto</span><b>${eur(r.direct)}</b></div>
+    <div class="row"><span>Quota costi comuni, trasporto e imprevisti</span><b>${eur(share)}</b></div>
+    <div class="row tot"><span>Costo della sezione</span><b>${eur(r.alloc)}</b></div>
+    <div class="row"><span></span><b>${kw ? nf(r.alloc / kw, 0) + ' €/kWp' : '—'}</b></div>
+    <div class="row tot"><span>Prezzo della sezione</span><b>${eur(r.allocPrice)}</b></div>
+    <div class="row"><span>markup di sito ${nf(R.tot.markup, 1)}%</span><b>${kw ? nf(r.allocPrice / kw, 0) + ' €/kWp' : '—'}</b></div>
+    <p class="note">La quota comune è ripartita in proporzione ai kWp. Markup, prezzo e totali del sito sono nel <button class="lnk" data-tab="recap" type="button" style="font-size:12px">Riepilogo sito</button>.</p>`;
 }
 
 /* ---------- blocchi ---------- */
