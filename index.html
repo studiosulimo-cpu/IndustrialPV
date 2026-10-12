@@ -153,6 +153,9 @@ table.boq{width:100%;border-collapse:collapse;min-width:760px;font-size:13.5px}
 .puw input:hover{border-color:var(--line)}
 .puw input:focus{border-color:var(--accent);background:var(--sunk);outline:none}
 tr.edited .puw input{background:var(--warn-bg);color:var(--warn);font-weight:500}
+.boq td.pq{width:120px}
+.boq td.pq .puw input{width:84px}
+td.qed .puw input{background:var(--warn-bg);color:var(--warn);font-weight:500}
 .rst{border:0;background:transparent;cursor:pointer;color:var(--warn);font-size:15px;padding:0 2px}
 .boq tbody.foot td{background:var(--sunk)}
 .boq tr.tot td{font-weight:600;font-family:var(--f-display);font-size:15px}
@@ -513,7 +516,7 @@ const PRICES = {
   parap_ms: 23, parap_nolo: 2.0, scaf_ms: 24, scaf_nolo: 2.8, tower_ms: 1200, tower_nolo: 150,
   skylight: 18, lifeline: 55, lifeline_doc: 600, fence: 18.5, fence_nolo: 1.1, site_hut: 450, dpi: 500,
   // noli
-  crane: 950, hoist: 190, hoist_tr: 400, ple: 220, ple_tr: 300, telehandler: 260, excav: 480,
+  crane: 950, truck_crane: 650, hoist: 190, hoist_tr: 400, ple: 220, ple_tr: 300, telehandler: 260, excav: 480,
   // progettazione e pratiche (minimi / €/kWp gestiti nel codice)
   lightning: 500, edil: 800, dogane: 500, struct_cp_dep: 500, titolo_cp: 1500
 };
@@ -554,10 +557,13 @@ function compute(S, mode, opts) {
   const SITE = !!(opts && opts.site);   // in un sito: i costi comuni (connessione, pratiche, cantiere) li calcola computeSite
   const d = {}, items = [], checks = [];
   const ov = S.ov || {};
+  const qov = {};   // le quantità si impostano nei dati della sezione, non nel computo
   const add = (cat, id, desc, qty, um, unit, opt = {}) => {
-    if (!(qty > 0)) return;
+    const hasQ = qov[id] !== undefined && qov[id] !== null && qov[id] !== '' && !isNaN(+qov[id]);
+    if (!(qty > 0) && !hasQ) return;
+    const q = hasQ ? +qov[id] : qty;
     const u = (!opt.field && ov[id] !== undefined && ov[id] !== '' && !isNaN(+ov[id])) ? +ov[id] : unit;
-    items.push({ cat, id, desc, qty, um, unit: u, def: unit, mat: !!opt.mat, ref: opt.ref || '', edited: u !== unit, field: opt.field || '' });
+    items.push({ cat, id, desc, qty: q, defQty: qty, qEdited: hasQ && Math.abs(q - qty) > 1e-9, um, unit: u, def: unit, mat: !!opt.mat, ref: opt.ref || '', edited: u !== unit, field: opt.field || '' });
   };
   const chk = (lvl, title, detail, ref) => checks.push({ lvl, title, detail, ref: ref || '' });
 
@@ -967,20 +973,34 @@ function compute(S, mode, opts) {
   H.equip = (mode === 'roof' && S.equip) ? d.Nmod * 0.6 * 0.03 : 0;
   H.bess = S.bess_kwh > 0 ? 0 : 0; // compresa nella voce a corpo
   d.H = H;
-  d.hTot = Object.values(H).reduce((a, b) => a + b, 0);
-  d.hSteel = mode === 'carport' ? d.steelT * 12 : 0;
+  // ore per gruppo di lavorazione: calcolate con le rese oppure inserite a mano nella sezione
+  const G = {
+    mod: H.mod + H.opt + (H.ballast || 0) + (H.sheet || 0),
+    dc: H.strings + H.trays + H.equip,
+    ac: H.inv + H.ac + (H.led || 0),
+    qe: H.qe + H.mon,
+    test: H.test
+  };
+  const steelAuto = mode === 'carport' ? d.steelT * 12 : 0;
+  d.hAuto = Object.assign({}, G, { steel: steelAuto });
+  d.mdoManual = S.mdo_mode === 'manual';
+  if (d.mdoManual) for (const k of Object.keys(G)) if (S['h_' + k] > 0) G[k] = S['h_' + k];
+  d.G = G;
+  d.hTot = Object.values(G).reduce((a, b) => a + b, 0);
+  d.hSteel = mode === 'carport' ? (d.mdoManual && S.h_steel > 0 ? S.h_steel : steelAuto) : 0;
   const crewH = S.team * S.h_day;
   d.days = Math.max(1, Math.ceil(d.hTot / crewH)) + (mode === 'carport' ? Math.ceil(d.hSteel / (S.team * S.h_day)) : 0);
   d.daysCivil = mode === 'carport' ? Math.ceil(d.ncol / 6) + 2 : 0;
   d.daysTot = d.days + d.daysCivil + (mode === 'roof' && S.roof_type === 'amianto' ? Math.ceil((S.asb_m2 > 0 ? S.asb_m2 : S.roof_area) / 250) : 0);
   d.months = Math.max(1, Math.ceil(d.daysTot / 21));
 
-  add(C.MDO, 'mdo_mod', 'Posa strutture, moduli' + (d.Nopt ? ' e ottimizzatori' : '') + (d.ballastT ? ' e zavorre' : ''), +(H.mod + H.opt + (H.ballast || 0) + (H.sheet || 0)).toFixed(1), 'h', S.cost_h);
-  add(C.MDO, 'mdo_dc', 'Cablaggio stringhe, connettori e vie cavi', +(H.strings + H.trays + H.equip).toFixed(1), 'h', S.cost_h);
-  add(C.MDO, 'mdo_ac', 'Posa inverter e linee AC', +(H.inv + H.ac + (H.led || 0)).toFixed(1), 'h', S.cost_h);
-  add(C.MDO, 'mdo_qe', 'Realizzazione quadri, collegamento a QG/cabina e monitoraggio', +(H.qe + H.mon).toFixed(1), 'h', S.cost_h);
-  add(C.MDO, 'mdo_test', 'Verifiche iniziali (isolamento, Voc/Isc, curve I-V), prove SPI, messa in servizio', +H.test.toFixed(1), 'h', S.cost_h, { ref: 'CEI 64-8/6 · CEI EN 62446-1' });
-  if (mode === 'carport') add(C.MDO, 'mdo_steel', 'Montaggio carpenteria metallica (squadra carpentieri)', +d.hSteel.toFixed(1), 'h', S.carp_cost_h);
+  const tagH = (k) => d.mdoManual && S['h_' + k] > 0 ? ' · ore inserite a mano' : '';
+  add(C.MDO, 'mdo_mod', 'Posa strutture, moduli' + (d.Nopt ? ' e ottimizzatori' : '') + (d.ballastT ? ' e zavorre' : '') + tagH('mod'), +G.mod.toFixed(1), 'h', S.cost_h);
+  add(C.MDO, 'mdo_dc', 'Cablaggio stringhe, connettori e vie cavi' + tagH('dc'), +G.dc.toFixed(1), 'h', S.cost_h);
+  add(C.MDO, 'mdo_ac', 'Posa inverter e linee AC' + tagH('ac'), +G.ac.toFixed(1), 'h', S.cost_h);
+  add(C.MDO, 'mdo_qe', 'Realizzazione quadri, collegamento a QG/cabina e monitoraggio' + tagH('qe'), +G.qe.toFixed(1), 'h', S.cost_h);
+  add(C.MDO, 'mdo_test', 'Verifiche iniziali (isolamento, Voc/Isc, curve I-V), prove SPI, messa in servizio' + tagH('test'), +G.test.toFixed(1), 'h', S.cost_h, { ref: 'CEI 64-8/6 · CEI EN 62446-1' });
+  if (mode === 'carport') add(C.MDO, 'mdo_steel', 'Montaggio carpenteria metallica (squadra carpentieri)' + (d.mdoManual && S.h_steel > 0 ? ' · ore inserite a mano' : ''), +d.hSteel.toFixed(1), 'h', S.carp_cost_h);
   const vehicles = Math.max(1, Math.ceil(S.team / 3));
   if (!SITE) add(C.MDO, 'travel_km', `Trasferimenti mezzi (${vehicles} mezzi × ${d.daysTot} gg × ${S.km * 2} km A/R)`, Math.round(vehicles * d.daysTot * S.km * 2), 'km', S.eur_km);
   if (!SITE && S.trasf_pp > 0) add(C.MDO, 'travel_pp', 'Trasferta squadra (vitto e alloggio)', S.team * d.days, 'gg·pers', S.trasf_pp);
@@ -989,15 +1009,27 @@ function compute(S, mode, opts) {
   if (mode === 'roof') {
     const lifts = Math.ceil(d.Nmod / M.pallet) + Math.ceil(d.Nmod / 60) + Math.ceil((d.ballastT || 0) / 1.2) + 1;
     d.lifts = lifts;
-    if (S.lift === 'gru') add(C.NOL, 'crane', `Autogru 35–50 t con operatore (${lifts} sollevamenti, ~30/giorno)`, Math.max(1, Math.ceil(lifts / 30)), 'gg', P.crane);
-    else { add(C.NOL, 'hoist', 'Montacarichi / elevatore per moduli', Math.ceil(d.days * 0.5), 'gg', P.hoist); add(C.NOL, 'hoist_tr', 'Trasporto, montaggio e smontaggio montacarichi', 1, 'a corpo', P.hoist_tr); }
-    if (S.ple) { add(C.NOL, 'ple', 'Piattaforma di lavoro elevabile (PLE)', d.days, 'gg', P.ple); add(C.NOL, 'ple_tr', 'Trasporto PLE A/R', 1, 'a corpo', P.ple_tr); }
+    // giorni automatici per mezzo: autogru ~30 tiri/giorno, camion con gru ~12 tiri/giorno, montacarichi per metà della posa
+    const liftAuto = { gru: Math.max(1, Math.ceil(lifts / 30)), camion: Math.max(1, Math.ceil(lifts / 12)), montacarichi: Math.max(1, Math.ceil(d.days * 0.5)), nessuno: 0 };
+    d.liftDaysAuto = liftAuto[S.lift] ?? liftAuto.gru;
+    d.liftDays = S.lift_days > 0 ? S.lift_days : d.liftDaysAuto;
+    if (S.lift === 'gru') add(C.NOL, 'crane', `Autogru 35–50 t con operatore (${lifts} sollevamenti)`, d.liftDays, 'gg', P.crane);
+    else if (S.lift === 'camion') {
+      add(C.NOL, 'truck_crane', `Autocarro con gru per movimentazione e sollevamento (${lifts} sollevamenti)`, d.liftDays, 'gg', P.truck_crane);
+      if (S.eave_h > 12) chk('warn', 'Altezza oltre lo sbraccio tipico del camion gru', `Gronda a ${S.eave_h} m: verificare portata e sbraccio, altrimenti autogru.`, 'D.Lgs. 81/08 All. VI');
+    } else if (S.lift === 'montacarichi') { add(C.NOL, 'hoist', 'Montacarichi / elevatore per moduli', d.liftDays, 'gg', P.hoist); add(C.NOL, 'hoist_tr', 'Trasporto, montaggio e smontaggio montacarichi', 1, 'a corpo', P.hoist_tr); }
+    d.pleDaysAuto = d.days;
+    d.pleDays = S.ple_days > 0 ? S.ple_days : d.pleDaysAuto;
+    if (S.ple) { add(C.NOL, 'ple', 'Piattaforma di lavoro elevabile (PLE)', d.pleDays, 'gg', P.ple); add(C.NOL, 'ple_tr', 'Trasporto PLE A/R', 1, 'a corpo', P.ple_tr); }
   } else {
-    add(C.NOL, 'crane', 'Autogru per montaggio carpenteria (~8 t/giorno)', Math.max(1, Math.ceil(d.steelT / 8)), 'gg', P.crane);
-    add(C.NOL, 'telehandler', 'Sollevatore telescopico per movimentazione moduli', Math.max(1, Math.ceil(d.days * 0.6)), 'gg', P.telehandler);
-    add(C.NOL, 'ple', 'Piattaforma di lavoro elevabile (PLE)', d.days, 'gg', P.ple);
-    add(C.NOL, 'ple_tr', 'Trasporto PLE A/R', 1, 'a corpo', P.ple_tr);
-    if (S.found === 'plinto') add(C.NOL, 'excav', 'Escavatore 3,5 t con operatore', Math.ceil(d.ncol / 6), 'gg', P.excav);
+    d.craneDaysAuto = Math.max(1, Math.ceil(d.steelT / 8));
+    d.teleDaysAuto = Math.max(1, Math.ceil(d.days * 0.6));
+    d.pleDaysAuto = d.days;
+    d.excavDaysAuto = Math.ceil(d.ncol / 6);
+    add(C.NOL, 'crane', 'Autogru per montaggio carpenteria (~8 t/giorno)', S.crane_days > 0 ? S.crane_days : d.craneDaysAuto, 'gg', P.crane);
+    add(C.NOL, 'telehandler', 'Sollevatore telescopico per movimentazione moduli', S.tele_days > 0 ? S.tele_days : d.teleDaysAuto, 'gg', P.telehandler);
+    if (S.ple !== false) { add(C.NOL, 'ple', 'Piattaforma di lavoro elevabile (PLE)', S.ple_days > 0 ? S.ple_days : d.pleDaysAuto, 'gg', P.ple); add(C.NOL, 'ple_tr', 'Trasporto PLE A/R', 1, 'a corpo', P.ple_tr); }
+    if (S.found === 'plinto') add(C.NOL, 'excav', 'Escavatore 3,5 t con operatore', S.excav_days > 0 ? S.excav_days : d.excavDaysAuto, 'gg', P.excav);
   }
 
   /* ---- Sicurezza ---- */
@@ -1017,7 +1049,9 @@ function compute(S, mode, opts) {
       add(C.SIC, 'lifeline', 'Linea vita permanente su copertura (EN 795 tipo C) con certificazione', S.lifeline_m, 'm', P.lifeline, { mat: true, ref: 'UNI EN 795 · UNI 11578' });
       add(C.SIC, 'lifeline_doc', 'Elaborato tecnico della copertura', 1, 'a corpo', P.lifeline_doc);
     }
-    add(C.SIC, 'fence', 'Delimitazione area di stoccaggio e sollevamento (montaggio, smontaggio, 1° mese)', Math.round(30 + 0.02 * d.Nmod), 'm', P.fence);
+    d.storageAuto = Math.round(50 + 0.08 * d.Nmod);
+    d.storageM2 = S.storage_m2 > 0 ? S.storage_m2 : d.storageAuto;
+    add(C.SIC, 'fence', `Delimitazione area di stoccaggio e sollevamento ${Math.round(d.storageM2)} m² (perimetro; montaggio, smontaggio, 1° mese)`, Math.round(4 * Math.sqrt(d.storageM2)), 'm', P.fence);
   } else {
     const fm = S.fence_m > 0 ? S.fence_m : Math.round(2 * (d.Lrow + S.cov_depth * d.wings) + 10);
     add(C.SIC, 'fence', 'Recinzione mobile di cantiere in area parcheggio (montaggio, smontaggio, 1° mese)', fm, 'm', P.fence, { ref: 'D.Lgs. 81/08 All. XV' });
@@ -1102,6 +1136,7 @@ const DESIGN_IDS = ['prog_el', 'prog_str', 'collaudo', 'deposito', 'lightning', 
 function mergeSec(common, sec) {
   const o = Object.assign({}, common, sec.state);
   o.ov = sec.state.ov || {};
+  o.qov = sec.state.qov || {};
   return o;
 }
 
@@ -1149,10 +1184,13 @@ function computeSite(site) {
   // voci comuni
   const items = [], checks = [];
   const ov = C0.ov || {};
+  const qov = {};
   const add = (cat, id, desc, qty, um, unit, opt = {}) => {
-    if (!(qty > 0)) return;
+    const hasQ = qov[id] !== undefined && qov[id] !== null && qov[id] !== '' && !isNaN(+qov[id]);
+    if (!(qty > 0) && !hasQ) return;
+    const q = hasQ ? +qov[id] : qty;
     const u = (ov[id] !== undefined && ov[id] !== '' && !isNaN(+ov[id])) ? +ov[id] : unit;
-    items.push({ cat, id, desc, qty, um, unit: u, def: unit, mat: !!opt.mat, ref: opt.ref || '', edited: u !== unit, field: '' });
+    items.push({ cat, id, desc, qty: q, defQty: qty, qEdited: hasQ && Math.abs(q - qty) > 1e-9, um, unit: u, def: unit, mat: !!opt.mat, ref: opt.ref || '', edited: u !== unit, field: '' });
   };
   const chk = (lvl, title, detail, ref) => checks.push({ lvl, title, detail, ref: ref || '', sec: 'Sito' });
   const P = PRICES, K = SITE_CAT, Pac = sd.pac, kWp = sd.pdc;
@@ -1285,7 +1323,7 @@ function commonDefault() {
     prog_el: true, lightning_doc: true, dl: true,
     coord_pct: 1.2, disc_mat: 0, transport: 3, contingency: 5,
     markup: 30, price: 0, price_mode: 'markup',
-    ov: {}
+    ov: {}, qov: {}
   };
 }
 // dati propri di ogni sezione
@@ -1298,19 +1336,21 @@ function sectionStateDefault(mode) {
     l_dc: 35, l_extra: 8, dv_dc_max: 1.5, k_group_dc: 0.65, t_cab_dc: 70,
     l_ac1: 25, l_ac2: 60, dv_ac_max: 1.0, k_group_ac: 0.8, t_amb: 40, cable_index: 1.0,
     tray_dc: 0, tray_ac: 0, lps: false,
-    ov: {}
+    mdo_mode: 'calc', h_mod: 0, h_dc: 0, h_ac: 0, h_qe: 0, h_test: 0, h_steel: 0,
+    ov: {}, qov: {}
   };
   if (mode === 'roof') return Object.assign(base, {
     roof_type: 'grecata', roof_area: 2600, fill: 0, kwp_target: 300,
     roof_capacity: 25, ballast_kg: null, asb_m2: 0,
     eave_h: 8, perimeter: 0, edge_pct: 100, skylight_m2: null, lifeline_m: 0,
-    lift: 'gru', ple: true, scaf_m: 0, towers: 0, equip: true, prog_str: true
+    lift: 'gru', lift_days: 0, ple: true, ple_days: 0, storage_m2: 0, scaf_m: 0, towers: 0, equip: true, prog_str: true
   });
   return Object.assign(base, {
     l_dc: 30, l_ac1: 15, l_ac2: 80,
     stalls: 80, layout: 'doppia', stall_w: 2.5, cov_depth: 5.0, span: 5.0, steel_kgm2: 0,
     found: 'plinto', plinth_m3: 0, cover: 'nessuna', gutters: true, led: true, ev_n: 0,
-    trench_m: 80, fence_m: 0, equip: false
+    trench_m: 80, fence_m: 0, equip: false,
+    ple: true, crane_days: 0, tele_days: 0, ple_days: 0, excav_days: 0
   });
 }
 function newSection(mode, name) {
@@ -1330,12 +1370,12 @@ function exampleSite() {
 // riallinea un sito salvato ai valori di default (campi nuovi aggiunti nelle versioni successive)
 function normalizeSite(x) {
   const s = Object.assign(newSite(), x || {});
-  s.common = Object.assign(commonDefault(), (x && x.common) || {}); s.common.ov = (x && x.common && x.common.ov) || {};
+  s.common = Object.assign(commonDefault(), (x && x.common) || {}); s.common.ov = (x && x.common && x.common.ov) || {}; s.common.qov = (x && x.common && x.common.qov) || {};
   s.sections = ((x && x.sections) || []).filter(Boolean).map(sec => {
     const mode = sec.mode === 'carport' ? 'carport' : 'roof';
     const d = sectionStateDefault(mode); const st = sec.state || {};
     const o = Object.assign(d, st);
-    o.mod = Object.assign({}, d.mod, st.mod || {}); o.inv = Object.assign({}, d.inv, st.inv || {}); o.st = Object.assign({}, d.st, st.st || {}); o.ov = st.ov || {};
+    o.mod = Object.assign({}, d.mod, st.mod || {}); o.inv = Object.assign({}, d.inv, st.inv || {}); o.st = Object.assign({}, d.st, st.st || {}); o.ov = st.ov || {}; o.qov = st.qov || {};
     return { id: sec.id || uid(), mode, name: sec.name || (mode === 'roof' ? 'Tetto' : 'Pensilina'), state: o };
   });
   s.v = SCHEMA;
@@ -1508,6 +1548,30 @@ function secGroups(mode) {
       ...(R ? [{ k: 'equip', l: 'Equipotenziale strutture', t: 'chk' }] : [])
     ]
   });
+  const man2 = (s) => s.mdo_mode === 'manual';
+  const hA = (k) => (r) => nf(r.d.hAuto ? r.d.hAuto[k] : 0, 1);
+  g.push({
+    id: 'mdo', title: 'Manodopera della sezione', sub: 'Ore calcolate con le rese o inserite da te', fields: [
+      { k: 'mdo_mode', l: 'Ore di manodopera', t: 'sel', o: [['calc', 'Calcolate con le rese per attività'], ['manual', 'Inserite a mano (vuoto = valore calcolato)']], wide: true,
+        h: R ? 'Rese: posa 0,28–0,45 h/modulo secondo la copertura (+0,08 h per ottimizzatore, 1,5 h/t di zavorra) · cablaggio 1,2 h/stringa + passerelle 0,15–0,25 h/m · inverter 3 h + 0,03 h/kW, cavi AC (0,06 + 0,002·sezione) h/m · quadri 12 h + 3 h/inverter · verifiche 8 h + 0,3 h/stringa.'
+             : 'Rese: posa moduli 0,30 h/modulo (+0,15 h/m² lamiera) · cablaggio 1,2 h/stringa + passerelle · inverter 3 h + 0,03 h/kW, cavi AC, LED 1,5 h/pz · quadri 12 h + 3 h/inverter · verifiche 8 h + 0,3 h/stringa · carpenteria 12 h/t.' },
+      { k: 'h_mod', l: R ? 'Posa strutture e moduli' : 'Posa moduli e lamiere', u: 'h', step: 0.5, auto: hA('mod'), show: man2 },
+      { k: 'h_dc', l: 'Cablaggio stringhe e vie cavi', u: 'h', step: 0.5, auto: hA('dc'), show: man2 },
+      { k: 'h_ac', l: 'Posa inverter e linee AC', u: 'h', step: 0.5, auto: hA('ac'), show: man2 },
+      { k: 'h_qe', l: 'Quadri e collegamenti', u: 'h', step: 0.5, auto: hA('qe'), show: man2 },
+      { k: 'h_test', l: 'Verifiche e messa in servizio', u: 'h', step: 0.5, auto: hA('test'), show: man2 },
+      ...(R ? [] : [{ k: 'h_steel', l: 'Montaggio carpenteria (carpentieri)', u: 'h', step: 0.5, auto: hA('steel'), show: man2 }])
+    ]
+  });
+  if (!R) g.push({
+    id: 'nol', title: 'Noli e mezzi', sub: 'Giorni calcolati, modificabili', fields: [
+      { k: 'crane_days', l: 'Autogru per carpenteria', u: 'gg', auto: (r) => r.d.craneDaysAuto, h: 'Vuoto = circa 8 t di acciaio al giorno.' },
+      { k: 'tele_days', l: 'Sollevatore telescopico', u: 'gg', auto: (r) => r.d.teleDaysAuto },
+      { k: 'ple', l: 'Piattaforma aerea (PLE)', t: 'chk' },
+      { k: 'ple_days', l: 'Giorni di PLE', u: 'gg', auto: (r) => r.d.pleDaysAuto, show: (s) => s.ple !== false },
+      { k: 'excav_days', l: 'Escavatore per plinti', u: 'gg', auto: (r) => r.d.excavDaysAuto, show: (s) => s.found === 'plinto' }
+    ]
+  });
   if (R) g.push({
     id: 'sic', title: 'Sicurezza e noli in copertura', sub: 'D.Lgs. 81/08 Titolo IV', fields: [
       { k: 'edge_pct', l: 'Bordi da proteggere', u: '%', h: 'Quota del perimetro senza parapetto fisso. Su impianti piccoli in tetti grandi proteggi solo la zona di lavoro.' },
@@ -1515,8 +1579,11 @@ function secGroups(mode) {
       { k: 'lifeline_m', l: 'Linea vita permanente', u: 'm', h: '0 = esistente o non richiesta.' },
       { k: 'scaf_m', l: 'Ponteggio di facciata', u: 'm', h: 'Lunghezza di facciata; 0 = solo parapetti.' },
       { k: 'towers', l: 'Torri scala di accesso', u: 'pz', auto: (r) => r.d.towers, h: '0 = una ogni 3.000 m².' },
-      { k: 'lift', l: 'Sollevamento materiali', t: 'sel', o: [['gru', 'Autogru'], ['montacarichi', 'Montacarichi']] },
-      { k: 'ple', l: 'Piattaforma aerea (PLE)', t: 'chk' }
+      { k: 'storage_m2', l: 'Area di stoccaggio e sollevamento', u: 'm²', auto: (r) => nf(r.d.storageAuto, 0), h: 'Vuoto = stima dal numero di moduli. Nel computo diventa la recinzione del perimetro.' },
+      { k: 'lift', l: 'Sollevamento materiali in copertura', t: 'sel', o: [['gru', 'Autogru con operatore'], ['camion', 'Autocarro con gru'], ['montacarichi', 'Montacarichi / elevatore'], ['nessuno', 'Nessun mezzo']], h: 'Autogru ~30 tiri al giorno, camion con gru ~12.' },
+      { k: 'lift_days', l: 'Giorni del mezzo di sollevamento', u: 'gg', auto: (r) => r.d.liftDaysAuto, show: (s) => s.lift !== 'nessuno', h: 'Vuoto = calcolati dai sollevamenti.' },
+      { k: 'ple', l: 'Piattaforma aerea (PLE)', t: 'chk' },
+      { k: 'ple_days', l: 'Giorni di PLE', u: 'gg', auto: (r) => r.d.pleDaysAuto, show: (s) => s.ple, h: 'Vuoto = per tutta la durata della posa.' }
     ]
   });
   return g;
@@ -1786,7 +1853,7 @@ function boqBlock(title, sub, items, scope, ov, tot, isCommon) {
   const foot = isCommon && tot ? `<tbody class="foot"><tr><td colspan="4">Totale costi comuni</td><td class="num">${eur(sum)}</td></tr><tr><td colspan="4">Trasporto materiali (${nf(site().common.transport, 1)}% su ${eur(tot.sumMat)} di materiali di tutte le sezioni)</td><td class="num">${eur(tot.transport)}</td></tr><tr><td colspan="4">Imprevisti (${nf(site().common.contingency, 1)}%)</td><td class="num">${eur(tot.contingency)}</td></tr></tbody>`
     : `<tbody class="foot"><tr class="tot"><td colspan="4">Totale costi diretti della sezione</td><td class="num">${eur(sum)}</td></tr></tbody>`;
   const nEd = items.filter(i => i.edited).length;
-  return `<section class="blk"><div class="blkhead"><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div><div class="boqbar"><span class="muted">${nEd ? (nEd === 1 ? '1 prezzo modificato' : nEd + ' prezzi modificati') : 'Prezzi di riferimento'}</span>${nEd ? `<button class="btn sm" data-rstall="${scope}" type="button">Ripristina prezzi</button>` : ''}</div></div>
+  return `<section class="blk"><div class="blkhead"><div><h2>${esc(title)}</h2><p>${esc(sub)} I prezzi unitari sono modificabili; le quantità si impostano nei dati sopra.</p></div><div class="boqbar"><span class="muted">${nEd ? (nEd === 1 ? '1 prezzo modificato' : nEd + ' prezzi modificati') : 'Prezzi di riferimento'}</span>${nEd ? `<button class="btn sm" data-rstall="${scope}" type="button">Ripristina prezzi</button>` : ''}</div></div>
   <div class="tablewrap"><table class="boq"><thead><tr><th>Voce</th><th class="num">Q.tà</th><th>U.M.</th><th class="num">Prezzo unit. €</th><th class="num">Totale</th></tr></thead>${html}${foot}</table></div></section>`;
 }
 function renderRecap(R) {
@@ -1825,9 +1892,19 @@ document.addEventListener('change', (e) => {
     else { target.ov = target.ov || {}; if (el.value === '' || Number.isNaN(v) || (it && Math.abs(v - it.def) < 1e-9)) delete target.ov[id]; else target.ov[id] = v; }
     touch(); update(); const again = document.getElementById(el.id); if (again) again.focus();
   }
+  if (el.dataset && el.dataset.qov) {
+    const s = site(); const scope = el.dataset.scope; const id = el.dataset.qov; const v = parseFloat(el.value);
+    const items = scope === 'c' ? app.R.items : (secRes(scope) || { items: [] }).items;
+    const it = items.find(i => i.id === id);
+    const target = scope === 'c' ? s.common : (s.sections.find(x => x.id === scope) || {}).state; if (!target) return;
+    target.qov = target.qov || {};
+    if (el.value === '' || Number.isNaN(v) || v < 0 || (it && Math.abs(v - it.defQty) < 1e-9)) delete target.qov[id]; else target.qov[id] = v;
+    touch(); update(); const again = document.getElementById(el.id); if (again) again.focus();
+    return;
+  }
   if (el.id === 'importFile' && el.files && el.files[0]) { const fr = new FileReader(); fr.onload = () => doImport(String(fr.result)); fr.readAsText(el.files[0]); el.value = ''; }
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.dataset && e.target.dataset.ov) e.target.blur(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.dataset && (e.target.dataset.ov || e.target.dataset.qov)) e.target.blur(); });
 document.addEventListener('click', (e) => {
   const t = e.target.closest('button'); if (!t) return;
   const s = site();
@@ -1847,7 +1924,8 @@ document.addEventListener('click', (e) => {
   if ((t.id === 'secLeft' || t.id === 'secRight') && s && curSec()) { const i = s.sections.indexOf(curSec()); const j = t.id === 'secLeft' ? i - 1 : i + 1; if (j < 0 || j >= s.sections.length) return; [s.sections[i], s.sections[j]] = [s.sections[j], s.sections[i]]; touch(); renderTabs(); return; }
   if ((t.id === 'secPrev' || t.id === 'secNext') && s && curSec()) { const i = s.sections.indexOf(curSec()); const j = t.id === 'secPrev' ? i - 1 : i + 1; if (j < 0) return go('site', s.id, 'common'); if (j >= s.sections.length) return go('site', s.id, 'recap'); return go('site', s.id, s.sections[j].id); }
   if (t.dataset.rst) { const target = t.dataset.scope === 'c' ? s.common : (s.sections.find(x => x.id === t.dataset.scope) || {}).state; if (target && target.ov) delete target.ov[t.dataset.rst]; touch(); return update(); }
-  if (t.dataset.rstall) { const target = t.dataset.rstall === 'c' ? s.common : (s.sections.find(x => x.id === t.dataset.rstall) || {}).state; if (target) target.ov = {}; touch(); return update(); }
+  if (t.dataset.rstq) { const target = t.dataset.scope === 'c' ? s.common : (s.sections.find(x => x.id === t.dataset.scope) || {}).state; if (target && target.qov) delete target.qov[t.dataset.rstq]; touch(); return update(); }
+  if (t.dataset.rstall) { const target = t.dataset.rstall === 'c' ? s.common : (s.sections.find(x => x.id === t.dataset.rstall) || {}).state; if (target) { target.ov = {}; target.qov = {}; } touch(); return update(); }
   if (t.id === 'btnCopyAll' && app.R) return copyText(boqTSV(app.R), 'Computo completo copiato: incollalo in Excel');
   if (t.id === 'btnCopyRecap' && app.R) return copyText(recapTSV(app.R), 'Riepilogo copiato');
   if (t.id === 'bkDownload') return exportBackup(false);
