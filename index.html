@@ -253,32 +253,55 @@ details.method .notes{margin-top:12px}
 #printMenu{position:fixed;z-index:30;top:calc(env(safe-area-inset-top,0px) + 64px);right:20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px;display:flex;flex-direction:column;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
 #printMenu[hidden]{display:none}
 @media print{
-  @page{size:A4;margin:14mm 12mm}
-  html,body{background:#fff!important;color:#111!important}
+  @page{size:A4;margin:12mm 11mm}
+  html,body{background:#fff!important;color:#141C1A!important}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   body>*:not(#printArea){display:none!important}
-  #printArea{display:block!important;font:10.5pt/1.4 "IBM Plex Sans",Arial,sans-serif;color:#111}
-  #printArea *{color:#111!important;background:transparent!important;box-shadow:none!important}
-  .pr-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:10px}
-  .pr-head h1{font:700 17pt "Archivo",Arial,sans-serif;margin:0}
-  .pr-head .meta{font-size:9pt;text-align:right;line-height:1.35}
-  .pr-sub{font-size:9pt;margin:0 0 10px}
-  .pr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid #999;margin-bottom:12px}
-  .pr-grid>div{padding:7px 9px;border-right:1px solid #ccc;border-bottom:1px solid #ccc}
-  .pr-grid .l{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:.06em}
-  .pr-grid .v{display:block;font:500 13pt "IBM Plex Mono",monospace}
-  .pr-grid .n{display:block;font-size:7.5pt}
-  #printArea h2{font:700 12pt "Archivo",Arial,sans-serif;margin:14px 0 5px;break-after:avoid}
-  #printArea table{width:100%;border-collapse:collapse;font-size:8.8pt;margin-bottom:6px}
-  #printArea th,#printArea td{border-bottom:1px solid #ccc;padding:3px 5px;text-align:left;vertical-align:top}
-  #printArea th{font-size:7.5pt;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #111}
+  #printArea{display:block!important;font:9.6pt/1.4 "IBM Plex Sans",Arial,sans-serif;color:#141C1A;
+    --pa:#2441A6;--pa-soft:#E3E8F7;--pc:#A85A1C;--pc-soft:#F6E9DD;--ps:#1D7448;--ps-soft:#E2F2E8;--pm:#5A6764;--pl:#D3DBD8;--pz:#F5F7F6}
+  .pr-head{display:flex;justify-content:space-between;align-items:flex-end;background:var(--pa);color:#fff;padding:10px 14px;border-radius:5px;margin-bottom:8px}
+  .pr-head h1{font:700 18pt "Archivo",Arial,sans-serif;margin:2px 0 1px;color:#fff}
+  .pr-kick{font-size:7.5pt;text-transform:uppercase;letter-spacing:.1em;opacity:.85}
+  .pr-head .meta{font-size:8.5pt;text-align:right;line-height:1.35;opacity:.9}
+  .pr-sub{font-size:8.6pt;margin:0 0 9px;color:var(--pm)}
+  .pr-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+  .pr-hero>div{border-radius:5px;padding:9px 12px;border-left:5px solid}
+  .pr-hero .us{background:var(--pc-soft);border-color:var(--pc)} .pr-hero .them{background:var(--pa-soft);border-color:var(--pa)}
+  .pr-hero .l{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+  .pr-hero .us .l,.pr-hero .us .v{color:var(--pc)} .pr-hero .them .l,.pr-hero .them .v{color:var(--pa)}
+  .pr-hero .v{display:block;font:600 19pt "IBM Plex Mono",monospace;margin:1px 0}
+  .pr-hero .k{display:block;font:600 12pt "IBM Plex Mono",monospace}
+  .pr-hero .n{display:block;font-size:7.6pt;color:var(--pm);margin-top:2px}
+  .pr-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+  .pr-mini>div{border:1px solid var(--pl);border-top:3px solid var(--pm);border-radius:4px;padding:5px 8px}
+  .pr-mini .sic{border-top-color:var(--ps)} .pr-mini .pro{border-top-color:var(--pa)}
+  .pr-mini .l{display:block;font-size:7pt;text-transform:uppercase;letter-spacing:.05em;color:var(--pm)}
+  .pr-mini .v{display:block;font:600 11pt "IBM Plex Mono",monospace}
+  .pr-mini .n{display:block;font-size:7pt;color:var(--pm)}
+  #printArea h2{font:700 11.5pt "Archivo",Arial,sans-serif;margin:12px 0 4px;color:var(--pa);border-bottom:1.5px solid var(--pa);padding-bottom:2px;break-after:avoid}
+  #printArea table{width:100%;border-collapse:collapse;font-size:8.4pt;margin-bottom:5px}
+  #printArea th,#printArea td{border-bottom:1px solid var(--pl);padding:2.5px 5px;text-align:left;vertical-align:top}
+  #printArea th{font-size:7pt;text-transform:uppercase;letter-spacing:.05em;background:var(--pz);color:var(--pm);border-bottom:1px solid var(--pm)}
   #printArea td.n,#printArea th.n{text-align:right;font-family:"IBM Plex Mono",monospace;white-space:nowrap}
-  #printArea tr.g td{font-weight:700;border-bottom:1px solid #777;padding-top:6px}
-  #printArea tr.t td{font-weight:700;border-top:1.5px solid #111}
+  #printArea td small{display:block;font-size:7pt;color:var(--pm)}
+  #printArea .mu{color:var(--pm)}
+  #printArea th.c-us{color:var(--pc)} #printArea th.c-them{color:var(--pa)}
+  #printArea td.c-us{color:var(--pc);background:#FBF5EF} #printArea td.c-them{color:var(--pa);background:#F3F5FC}
+  #printArea tr.g td{font-weight:700;background:var(--pa-soft);color:var(--pa);padding-top:4px}
+  #printArea tr.t td{font-weight:700;border-top:1.5px solid #141C1A;background:var(--pz)}
+  #printArea tr.pr-vgp td{font-size:7.4pt;color:var(--pm);font-style:italic}
   #printArea tr{break-inside:avoid}
+  .pr-cat td.bar,.pr-cat th.bar{width:34%}
+  .cb{display:block;height:7px;background:var(--pz);border-radius:3px;overflow:hidden;margin-top:4px}
+  .cb i{display:block;height:100%;background:var(--pa);border-radius:3px}
+  .cb.sic i{background:var(--ps)} .cb.pro i{background:var(--pc)}
+  .pr-fee{margin-bottom:3px;table-layout:fixed} .pr-fee td:first-child{width:9%} .pr-fee td:nth-child(2){width:31%}
+  .pr-keep{break-inside:avoid-page}
+  .pr-note{font-size:7.8pt;color:var(--pm);margin:2px 0 6px}
   .pr-sec{break-before:page}
-  .pr-notes{font-size:9pt;border:1px solid #ccc;padding:6px 8px;white-space:pre-wrap}
-  .pr-foot{margin-top:12px;font-size:7.5pt;border-top:1px solid #999;padding-top:4px}
-  .pr-warn{font-size:8.5pt;border:1px solid #111;padding:5px 8px;margin:6px 0}
+  .pr-notes{font-size:8.8pt;border:1px solid var(--pl);border-left:4px solid var(--pa);padding:6px 8px;white-space:pre-wrap}
+  .pr-foot{margin-top:12px;font-size:7.2pt;color:var(--pm);border-top:1px solid var(--pl);padding-top:4px}
+  .pr-warn{font-size:8.4pt;background:#FBF0D9;border-left:4px solid #8E5B00;color:#5c3b00;padding:5px 8px;margin:6px 0;border-radius:3px}
 }
 @media (max-width:1080px){#backup{grid-template-columns:minmax(0,1fr)} .sitehead{grid-template-columns:minmax(0,1fr)} .addsec{margin-left:0}}
 </style>
@@ -524,7 +547,7 @@ const PRICES = {
   geo: 2500, trench: 55, pit: 220, led: 190, ev: 1700, bumper: 95, marking: 25,
   // sicurezza
   parap_ms: 23, parap_nolo: 2.0, scaf_ms: 24, scaf_nolo: 2.8, tower_ms: 1200, tower_nolo: 150,
-  skylight: 18, lifeline: 55, lifeline_doc: 600, fence: 18.5, fence_nolo: 1.1, site_hut: 450, dpi: 500,
+  skylight: 18, lifeline: 55, lifeline_doc: 600, fence: 18.5, fence_nolo: 1.1, site_hut: 450, dpi: 500, meet: 120,
   // noli
   crane: 950, truck_crane: 650, hoist: 190, hoist_tr: 400, ple: 220, ple_tr: 300, telehandler: 260, excav: 480,
   // progettazione e pratiche (minimi / €/kWp gestiti nel codice)
@@ -793,7 +816,7 @@ function compute(S, mode, opts) {
     MOD: 'Moduli e ottimizzatori', STR: 'Strutture di supporto', INV: 'Inverter e accumulo',
     CAB: 'Cavi, connettori e vie cavi', QE: 'Quadri, protezioni e connessione', MON: 'Monitoraggio',
     CIV: mode === 'roof' ? 'Opere edili in copertura' : 'Opere civili e fondazioni',
-    SIC: 'Sicurezza (D.Lgs. 81/08)', NOL: 'Noli e sollevamenti', MDO: 'Manodopera e trasferte',
+    SIC: 'Costi della sicurezza (All. XV D.Lgs. 81/08)', CSP: 'Coordinamento sicurezza CSP/CSE', NOL: 'Noli e sollevamenti', MDO: 'Manodopera e trasferte',
     PRO: 'Progettazione, pratiche e connessione'
   };
   d.C = C;
@@ -1045,30 +1068,31 @@ function compute(S, mode, opts) {
   /* ---- Sicurezza ---- */
   if (mode === 'roof') {
     const parapM = Math.round(d.perimeter * S.edge_pct / 100);
-    add(C.SIC, 'parap_ms', 'Parapetti provvisori di bordo EN 13374: montaggio, smontaggio e 1° mese', parapM, 'm', P.parap_ms, { ref: 'D.Lgs. 81/08 art. 125–126 · UNI EN 13374' });
-    add(C.SIC, 'parap_nolo', 'Nolo parapetti provvisori, mesi successivi al primo', parapM * (d.months - 1), 'm·mese', P.parap_nolo);
+    add(C.SIC, 'parap_ms', 'Parapetti provvisori di bordo EN 13374: montaggio, smontaggio e 1° mese', parapM, 'm', P.parap_ms, { ref: 'All. XV 4.1.1 lett. d · art. 125–126 · UNI EN 13374' });
+    add(C.SIC, 'parap_nolo', 'Nolo parapetti provvisori, mesi successivi al primo', parapM * (d.months - 1), 'm·mese', P.parap_nolo, { ref: 'All. XV 4.1.1 lett. d' });
     if (S.scaf_m > 0) {
       const m2 = Math.round(S.scaf_m * (S.eave_h + 1.2));
-      add(C.SIC, 'scaf_ms', 'Ponteggio di facciata: montaggio, smontaggio e 1° mese, con PiMUS', m2, 'm²', P.scaf_ms, { ref: 'D.Lgs. 81/08 art. 131–136' });
-      add(C.SIC, 'scaf_nolo', 'Nolo ponteggio mesi successivi', d.months > 1 ? m2 * (d.months - 1) : 0, 'm²·mese', P.scaf_nolo);
+      add(C.SIC, 'scaf_ms', 'Ponteggio di facciata: montaggio, smontaggio e 1° mese, con PiMUS', m2, 'm²', P.scaf_ms, { ref: 'All. XV 4.1.1 lett. a · art. 131–136' });
+      add(C.SIC, 'scaf_nolo', 'Nolo ponteggio mesi successivi', d.months > 1 ? m2 * (d.months - 1) : 0, 'm²·mese', P.scaf_nolo, { ref: 'All. XV 4.1.1 lett. a' });
     }
-    add(C.SIC, 'tower_ms', 'Torre scala di accesso alla copertura (montaggio e smontaggio)', d.towers, 'pz', P.tower_ms, { ref: 'D.Lgs. 81/08 art. 113' });
-    add(C.SIC, 'tower_nolo', 'Nolo torre scala', d.towers * d.months, 'pz·mese', P.tower_nolo);
-    add(C.SIC, 'skylight', 'Protezione lucernari (reti/grigliati anticaduta)', d.skylight, 'm²', P.skylight, { ref: 'D.Lgs. 81/08 art. 148' });
+    add(C.SIC, 'tower_ms', 'Torre scala di accesso alla copertura (montaggio e smontaggio)', d.towers, 'pz', P.tower_ms, { ref: 'All. XV 4.1.1 lett. a · art. 113' });
+    add(C.SIC, 'tower_nolo', 'Nolo torre scala', d.towers * d.months, 'pz·mese', P.tower_nolo, { ref: 'All. XV 4.1.1 lett. a' });
+    add(C.SIC, 'skylight', 'Protezione lucernari (reti/grigliati anticaduta)', d.skylight, 'm²', P.skylight, { ref: 'All. XV 4.1.1 lett. d · art. 148' });
     if (S.lifeline_m > 0) {
-      add(C.SIC, 'lifeline', 'Linea vita permanente su copertura (EN 795 tipo C) con certificazione', S.lifeline_m, 'm', P.lifeline, { mat: true, ref: 'UNI EN 795 · UNI 11578' });
-      add(C.SIC, 'lifeline_doc', 'Elaborato tecnico della copertura', 1, 'a corpo', P.lifeline_doc);
+      add(C.CIV, 'lifeline', 'Linea vita permanente su copertura (EN 795 tipo C) con certificazione', S.lifeline_m, 'm', P.lifeline, { mat: true, ref: 'UNI EN 795 · UNI 11578' });
+      add(C.CIV, 'lifeline_doc', 'Elaborato tecnico della copertura', 1, 'a corpo', P.lifeline_doc);
     }
     d.storageAuto = Math.round(50 + 0.08 * d.Nmod);
     d.storageM2 = S.storage_m2 > 0 ? S.storage_m2 : d.storageAuto;
-    add(C.SIC, 'fence', `Delimitazione area di stoccaggio e sollevamento ${Math.round(d.storageM2)} m² (perimetro; montaggio, smontaggio, 1° mese)`, Math.round(4 * Math.sqrt(d.storageM2)), 'm', P.fence);
+    add(C.SIC, 'fence', `Delimitazione area di stoccaggio e sollevamento ${Math.round(d.storageM2)} m² (perimetro; montaggio, smontaggio, 1° mese)`, Math.round(4 * Math.sqrt(d.storageM2)), 'm', P.fence, { ref: 'All. XV 4.1.1 lett. a' });
   } else {
     const fm = S.fence_m > 0 ? S.fence_m : Math.round(2 * (d.Lrow + S.cov_depth * d.wings) + 10);
-    add(C.SIC, 'fence', 'Recinzione mobile di cantiere in area parcheggio (montaggio, smontaggio, 1° mese)', fm, 'm', P.fence, { ref: 'D.Lgs. 81/08 All. XV' });
-    add(C.SIC, 'fence_nolo', 'Nolo recinzione, mesi successivi al primo', fm * (d.months - 1), 'm·mese', P.fence_nolo);
+    add(C.SIC, 'fence', 'Recinzione mobile di cantiere in area parcheggio (montaggio, smontaggio, 1° mese)', fm, 'm', P.fence, { ref: 'All. XV 4.1.1 lett. a' });
+    add(C.SIC, 'fence_nolo', 'Nolo recinzione, mesi successivi al primo', fm * (d.months - 1), 'm·mese', P.fence_nolo, { ref: 'All. XV 4.1.1 lett. a' });
   }
   if (!SITE) add(C.SIC, 'site_hut', 'Box spogliatoio e WC chimico (nolo mensile)', d.months, 'mese', P.site_hut, { ref: 'D.Lgs. 81/08 All. XIII' });
-  if (!SITE) add(C.SIC, 'dpi', 'DPI collettivi, segnaletica di cantiere, estintori, cassetta PS', 1, 'a corpo', P.dpi);
+  if (!SITE) add(C.SIC, 'dpi', 'Segnaletica e cartellonistica di cantiere, estintori, DPI per rischi interferenziali', 1, 'a corpo', P.dpi, { ref: 'All. XV 4.1.1 lett. b, d' });
+  if (!SITE && S.multi_imp !== false) add(C.SIC, 'meet', 'Riunioni di coordinamento tra imprese e procedure del PSC (1 ogni 2 settimane, min. 2)', Math.max(2, Math.ceil(d.daysTot / 10)), 'cad', P.meet, { ref: 'All. XV 4.1.1 lett. e, g' });
 
   /* ---- Progettazione e pratiche ---- */
   const kWp = d.Pdc;
@@ -1104,7 +1128,7 @@ function compute(S, mode, opts) {
   }
   // coordinamento sicurezza a percentuale (CSP/CSE)
   const coordDef = Math.round(Math.max(1500, sumAll * S.coord_pct / 100));
-  add(C.SIC, 'coord', `Coordinamento sicurezza CSP/CSE (${S.coord_pct}% lavori, min 1.500 €)`, !SITE && S.coord_pct > 0 ? 1 : 0, 'a corpo', coordDef, { ref: 'D.Lgs. 81/08 art. 90–92' });
+  add(C.CSP, 'coord', `Coordinamento sicurezza CSP/CSE (${S.coord_pct}% lavori, min 1.500 €)`, !SITE && S.coord_pct > 0 ? 1 : 0, 'a corpo', coordDef, { ref: 'D.Lgs. 81/08 art. 90–92' });
   const last = items[items.length - 1];
   if (last && last.id === 'coord') { last.tot = last.qty * last.unit; sumAll += last.tot; }
   const transport = sumMat * S.transport / 100;
@@ -1180,11 +1204,11 @@ const dmSpese = (V) => V <= 1e6 ? 25 : V >= 25e6 ? 10 : 25 - 15 * (V - 1e6) / 24
    ============================================================ */
 const SITE_CAT = {
   QE: 'Quadri, protezioni e connessione', INV: 'Inverter e accumulo', MON: 'Monitoraggio',
-  SIC: 'Sicurezza (D.Lgs. 81/08)', MDO: 'Manodopera e trasferte', PRO: 'Progettazione, pratiche e connessione'
+  SIC: 'Costi della sicurezza (All. XV D.Lgs. 81/08)', CSP: 'Coordinamento sicurezza CSP/CSE', MDO: 'Manodopera e trasferte', PRO: 'Progettazione, pratiche e connessione'
 };
 const CAT_ORDER_ALL = ['Moduli e ottimizzatori', 'Strutture di supporto', 'Inverter e accumulo', 'Cavi, connettori e vie cavi',
   'Quadri, protezioni e connessione', 'Monitoraggio', 'Opere edili in copertura', 'Opere civili e fondazioni',
-  'Sicurezza (D.Lgs. 81/08)', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
+  'Costi della sicurezza (All. XV D.Lgs. 81/08)', 'Coordinamento sicurezza CSP/CSE', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
 const DESIGN_IDS = ['prog_el', 'prog_str', 'collaudo', 'deposito', 'lightning', 'vvf_doc', 'dl', 'dm_prog_el', 'dm_dl_el', 'dm_coll_el', 'dm_prog_ed', 'dm_dl_ed', 'dm_coll_ed', 'int_prog_el', 'int_dl_el', 'int_prog_ed', 'int_dl_ed'];
 
 function mergeSec(common, sec) {
@@ -1230,7 +1254,7 @@ function computeSite(site) {
     let other = 0, extra = 0, hAll = hCommon;
     for (const r of res) { const base = Math.max(1, Math.ceil(r.d.hTot / crew)); other += r.d.days - base; extra += r.d.daysTot - r.d.days; hAll += r.d.hTot; }
     sd.daysWork = other + Math.max(1, Math.ceil(hAll / crew));
-    sd.daysTot = sd.daysWork + extra;
+    sd.daysTot = sd.daysWork + extra; sd.hAll = hAll;
   }
   sd.hCommon = hCommon;
   sd.months = Math.max(1, Math.ceil(sd.daysTot / 21));
@@ -1292,8 +1316,19 @@ function computeSite(site) {
   add(K.MDO, 'travel_km', `Trasferimenti mezzi (${vehicles} mezzi × ${sd.daysTot} gg × ${C0.km * 2} km A/R)`, Math.round(vehicles * sd.daysTot * C0.km * 2), 'km', C0.eur_km);
   if (C0.trasf_pp > 0) add(K.MDO, 'travel_pp', 'Trasferta squadra (vitto e alloggio)', C0.team * sd.daysWork, 'gg·pers', C0.trasf_pp);
   // sicurezza di cantiere
-  add(K.SIC, 'site_hut', 'Box spogliatoio e WC chimico (nolo mensile)', sd.months, 'mese', P.site_hut, { ref: 'D.Lgs. 81/08 All. XIII' });
-  add(K.SIC, 'dpi', 'DPI collettivi, segnaletica di cantiere, estintori, cassetta PS', 1, 'a corpo', P.dpi + (res.length > 1 ? 150 * (res.length - 1) : 0));
+  add(K.SIC, 'site_hut', 'Box spogliatoio e WC chimico, con pulizia periodica (nolo mensile)', sd.months, 'mese', P.site_hut, { ref: 'All. XV 4.1.1 lett. a · All. XIII' });
+  add(K.SIC, 'dpi', 'Segnaletica e cartellonistica di cantiere, estintori, DPI per rischi interferenziali', 1, 'a corpo', P.dpi + (res.length > 1 ? 150 * (res.length - 1) : 0), { ref: 'All. XV 4.1.1 lett. b, d' });
+  if (C0.multi_imp !== false) add(K.SIC, 'meet', 'Riunioni di coordinamento tra imprese e procedure del PSC (1 ogni 2 settimane, min. 2)', Math.max(2, Math.ceil(sd.daysTot / 10)), 'cad', P.meet, { ref: 'All. XV 4.1.1 lett. e, g' });
+  // obblighi di coordinamento e notifica (art. 90 c.3 e art. 99)
+  sd.ug = Math.ceil((sd.hAll || 0) / 8);
+  if (C0.multi_imp !== false) {
+    chk('info', 'Più imprese in cantiere: CSP, CSE e PSC obbligatori', `Anche se non contemporanee (subappalti, nolo a caldo di gru o PLE con operatore). Notifica preliminare all'ASL e all'Ispettorato del lavoro prima dell'inizio lavori. Stima ${sd.ug} uomini-giorno.`, 'D.Lgs. 81/08 art. 90 c.3, art. 99 c.1 lett. a');
+    if ((C0.sic_src || 'forfait') === 'forfait' && !(C0.coord_pct > 0)) chk('warn', 'Coordinamento sicurezza a zero', 'Con più imprese CSP e CSE sono obbligatori: inserire il compenso.', 'D.Lgs. 81/08 art. 90');
+  } else if (sd.ug >= 200) {
+    chk('warn', `Notifica preliminare obbligatoria (${sd.ug} uomini-giorno ≥ 200)`, 'Impresa unica ma entità presunta ≥ 200 uomini-giorno: notifica all\'ASL e all\'Ispettorato prima dell\'inizio lavori. CSP/CSE non obbligatori: il compenso di coordinamento si può togliere.', 'D.Lgs. 81/08 art. 99 c.1 lett. c');
+  } else {
+    chk('info', `Impresa unica, ${sd.ug} uomini-giorno: niente CSP/CSE né notifica`, 'Restano POS dell\'impresa e DUVRI del committente se il cantiere è dentro uno stabilimento attivo. Verificare che nessuna lavorazione (gru, ponteggio, PLE con operatore) sia affidata ad altri.', 'D.Lgs. 81/08 art. 26, 90 c.3, 99');
+  }
   // progettazione e pratiche (una volta per sito)
   if ((C0.el_src || 'forfait') === 'forfait' && C0.prog_el) add(K.PRO, 'prog_el', 'Progetto elettrico esecutivo (DM 37/08, CEI 0-2) e as-built', 1, 'a corpo', Math.round(Math.max(2000, 6 * kWp)), { ref: 'DM 37/08 art. 5' });
   if (C0.lightning_doc) add(K.PRO, 'lightning', 'Valutazione rischio fulminazione', 1, 'a corpo', P.lightning * Math.max(1, res.filter(r => r.sec.mode === 'roof').length || 1), { ref: 'CEI EN 62305-2' });
@@ -1366,11 +1401,11 @@ function computeSite(site) {
     // coordinamento sicurezza (unico per il cantiere, calcolato su tutte le categorie)
     if (SRC.sic === 'dm') {
       const f = fig(['imp', 'str', 'edi'], C0.dmq_sic, DM_DEF_SIC); sd.fees.sic = f;
-      add(K.SIC, 'dm_csp', 'Coordinamento sicurezza in progettazione (PSC)', f.grp.csp > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.csp * kS), { ref: lab + ' · D.Lgs. 81/08 art. 91' });
-      add(K.SIC, 'dm_cse', 'Coordinamento sicurezza in esecuzione (CSE)', f.grp.cse > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.cse * kS), { ref: lab + ' · D.Lgs. 81/08 art. 92' });
+      add(K.CSP, 'dm_csp', 'Coordinamento sicurezza in progettazione (PSC)', f.grp.csp > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.csp * kS), { ref: lab + ' · D.Lgs. 81/08 art. 91' });
+      add(K.CSP, 'dm_cse', 'Coordinamento sicurezza in esecuzione (CSE)', f.grp.cse > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.cse * kS), { ref: lab + ' · D.Lgs. 81/08 art. 92' });
       if (!(f.grp.csp > 0) && !(f.grp.cse > 0)) chk('warn', 'Coordinamento della sicurezza escluso', 'Con più imprese in cantiere CSP e CSE sono obbligatori.', 'D.Lgs. 81/08 art. 90');
     } else if (SRC.sic === 'interna') {
-      add(K.SIC, 'int_coord', 'Coordinamento sicurezza CSP/CSE (personale interno)', C0.int_h_coord > 0 ? C0.int_h_coord : sd.intAuto.coord, 'h', ch, { ref: 'D.Lgs. 81/08 art. 90–92' });
+      add(K.CSP, 'int_coord', 'Coordinamento sicurezza CSP/CSE (personale interno)', C0.int_h_coord > 0 ? C0.int_h_coord : sd.intAuto.coord, 'h', ch, { ref: 'D.Lgs. 81/08 art. 90–92' });
     }
     const tf = (f) => f ? f.net * kS : 0;
     sd.fees.total = tf(sd.fees.el) + tf(sd.fees.ed) + tf(sd.fees.sic);
@@ -1383,7 +1418,7 @@ function computeSite(site) {
   for (const it of items) { it.tot = it.qty * it.unit * (it.mat ? (1 - disc) : 1); if (it.mat) sumMat += it.tot; sumAll += it.tot; }
   const coordDef = Math.round(Math.max(1500, sumAll * C0.coord_pct / 100));
   if ((C0.sic_src || 'forfait') === 'forfait' && C0.coord_pct > 0 && res.length) {
-    add(K.SIC, 'coord', `Coordinamento sicurezza CSP/CSE (${C0.coord_pct}% lavori, min 1.500 €)`, 1, 'a corpo', coordDef, { ref: 'D.Lgs. 81/08 art. 90–92' });
+    add(K.CSP, 'coord', `Coordinamento sicurezza CSP/CSE (${C0.coord_pct}% lavori, min 1.500 €)`, 1, 'a corpo', coordDef, { ref: 'D.Lgs. 81/08 art. 90–92' });
     const it = items[items.length - 1]; it.tot = it.qty * it.unit; sumAll += it.tot;
   }
   const transport = sumMat * C0.transport / 100;
@@ -1414,7 +1449,8 @@ function computeSite(site) {
   const allItems = [];
   for (const r of res) for (const it of r.items) allItems.push(Object.assign({ secName: r.sec.name }, it));
   for (const it of items) allItems.push(Object.assign({ secName: 'Costi comuni di sito' }, it));
-  const sic = byCat['Sicurezza (D.Lgs. 81/08)'] || 0;
+  const sic = byCat['Costi della sicurezza (All. XV D.Lgs. 81/08)'] || 0;
+  const coordTot = byCat['Coordinamento sicurezza CSP/CSE'] || 0;
   const design = allItems.filter(i => DESIGN_IDS.includes(i.id)).reduce((a, b) => a + b.tot, 0);
   const proTot = byCat['Progettazione, pratiche e connessione'] || 0;
   // verifiche: sezione per sezione + sito
@@ -1424,11 +1460,12 @@ function computeSite(site) {
   return {
     sd, res, items, checks: allChecks, siteChecks: checks, byCat, allItems,
     tot: { sumMat, transport, contingency, commonTot, cost, price, markup, margin, profit: price - cost,
-      costKw: kWp > 0 ? cost / kWp : 0, priceKw: kWp > 0 ? price / kWp : 0, sic, design, pratiche: proTot - design }
+      costKw: kWp > 0 ? cost / kWp : 0, priceKw: kWp > 0 ? price / kWp : 0, sic, coord: coordTot, sicPct: (sumAll - proTot - coordTot) > 0 ? sic / (sumAll - proTot - coordTot) * 100 : 0, works: sumAll - proTot - coordTot, ug: sd.ug, design, pratiche: proTot - design }
   };
 }
 
-const api = { compute, computeSite, DM_Q, DM_CAT, DM_DEFAULTS, DM_DEF_EL, DM_DEF_ED, DM_DEF_SIC, dmP, dmSpese, CAT_ORDER_ALL, ST_DEFAULTS, MOD_PRESETS, INV_PRESETS, ROOF_TYPES, PRICES, qsk, pickAC, nextIn, tica };
+const SIC_CAT = 'Costi della sicurezza (All. XV D.Lgs. 81/08)', CSP_CAT = 'Coordinamento sicurezza CSP/CSE';
+const api = { SIC_CAT, CSP_CAT, compute, computeSite, DM_Q, DM_CAT, DM_DEFAULTS, DM_DEF_EL, DM_DEF_ED, DM_DEF_SIC, dmP, dmSpese, CAT_ORDER_ALL, ST_DEFAULTS, MOD_PRESETS, INV_PRESETS, ROOF_TYPES, PRICES, qsk, pickAC, nextIn, tica };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PVEngine = api;
 })(this);
 </script>
@@ -1445,7 +1482,7 @@ function commonDefault() {
     t_min: -15, t_max: 70, snow_zone: 'I-A', altitude: 345,
     team: 4, h_day: 8, cost_h: 30, carp_cost_h: 34, km: 30, eur_km: 0.5, trasf_pp: 0,
     prog_el: true, lightning_doc: true, dl: true,
-    coord_pct: 1.2, disc_mat: 0, transport: 3, contingency: 5,
+    coord_pct: 1.2, multi_imp: true, disc_mat: 0, transport: 3, contingency: 5,
     markup: 30, price: 0, price_mode: 'markup',
     el_src: 'dm', ed_src: 'dm', sic_src: 'dm',
     dm_cat_imp: 'IA.03', dm_cat_str: 'S.04', dm_cat_edi: 'E.20', dm_v_imp: 0, dm_v_str: 0, dm_v_edi: 0, dm_spese: 0, dm_bim: false,
@@ -1763,7 +1800,8 @@ const COMMON_GROUPS = [
   ] },
   { id: 'dmq_ed', title: 'Prestazioni · opere edili e strutturali', sub: 'Tavola Z-2 · colonne strutture ed edilizia', show: (s) => s.ed_src === 'dm',
     fields: E.DM_Q.filter(q => q.c in E.DM_DEF_ED).map(q => ({ k: 'dmq_ed.' + q.c, t: 'chk', l: `${q.code} · ${q.d}`, h: `${q.ph} · Q strutture ${q.str == null ? '—' : String(q.str).replace('.', ',')} · Q edilizia ${q.edi == null ? '—' : String(q.edi).replace('.', ',')}` })) },
-  { id: 'psic', title: 'Coordinamento della sicurezza', sub: 'Unico per il cantiere, su tutte le categorie', fields: [
+  { id: 'psic', title: 'Sicurezza di cantiere e coordinamento', sub: 'Obblighi art. 90 e 99 · compenso CSP/CSE su tutte le categorie', fields: [
+    { k: 'multi_imp', l: 'Più imprese in cantiere (anche non contemporanee)', t: 'chk', wide: true, h: 'Subappalti, ponteggiatori, nolo a caldo di gru o PLE con operatore. Rende obbligatori CSP, CSE, PSC e la notifica preliminare (art. 90 c.3, art. 99) e aggiunge le riunioni di coordinamento ai costi della sicurezza.' },
     { k: 'sic_src', l: 'Affidamento', t: 'sel', wide: true, o: [['dm', 'Esterna · compensi da DM parametri'], ['interna', 'Interna · ore × costo orario'], ['forfait', 'Esterna · stima forfettaria']] },
     { k: 'dmq_sic.QbIII07', l: 'QbIII.07 · Piano di sicurezza e coordinamento (CSP)', t: 'chk', show: (s) => s.sic_src === 'dm', h: 'Q 0,10 su ogni categoria' },
     { k: 'dmq_sic.QcI12', l: 'QcI.12 · Coordinamento della sicurezza in esecuzione (CSE)', t: 'chk', show: (s) => s.sic_src === 'dm', h: 'Q 0,25 su ogni categoria' },
@@ -2065,7 +2103,7 @@ function feesBlock(R) {
   const block = (title, F, cats) => F ? `<div class="tablewrap" style="margin-bottom:10px"><table class="grid compact boq"><thead><tr><th>Codice</th><th>Prestazione</th>${cats.map(c => `<th class="num">Q ${c === 'imp' ? 'imp.' : c === 'str' ? 'str.' : 'edil.'}</th><th class="num">Compenso</th>`).join('')}</tr></thead><tbody>${part(title, F, cats)}</tbody></table></div>` : '';
   return `<section class="blk"><div class="blkhead"><div><h2>Compensi professionali · DM parametri</h2><p>CP = V × G × Q × P, P = 0,03 + 10/V^0,4 · DM 17/06/2016 come attualizzato dall'All. I.13 D.Lgs. 36/2023 · IVA e contributi previdenziali esclusi</p></div><div class="boqbar"><b class="big" style="font-size:20px">${eur(f.total)}</b></div></div>
   ${block('Opere elettriche', f.el, ['imp'])}${block('Opere edili e strutturali', f.ed, ['str', 'edi'])}${block('Coordinamento della sicurezza (CSP e CSE)', f.sic, ['imp', 'str', 'edi'])}
-  <p class="muted" style="font-size:12.5px;margin:6px 0 0">Totale compensi pari al ${nf(f.total / Math.max(f.V.imp + f.V.str + f.V.edi, 1) * 100, 1)}% dell'importo lavori (${eur(f.V.imp + f.V.str + f.V.edi)}). Nel computo: progettazione, DL e collaudi in "Progettazione"; CSP e CSE in "Sicurezza".</p></section>`;
+  <p class="muted" style="font-size:12.5px;margin:6px 0 0">Totale compensi pari al ${nf(f.total / Math.max(f.V.imp + f.V.str + f.V.edi, 1) * 100, 1)}% dell'importo lavori (${eur(f.V.imp + f.V.str + f.V.edi)}). Nel computo: progettazione, DL e collaudi in "Progettazione"; CSP e CSE in "Coordinamento sicurezza CSP/CSE", separati dai costi della sicurezza dell'All. XV.</p></section>`;
 }
 function renderRecap(R) {
   const t = R.tot, kw = R.sd.pdc;
@@ -2075,7 +2113,7 @@ function renderRecap(R) {
     cell('them', 'Prezzo al cliente · totale', eur(t.price), `markup ${nf(t.markup, 1)}% · margine ${nf(t.margin, 1)}% · utile ${eur(t.profit)}`),
     cell('us', 'Costo per noi · per kW installato', nf(t.costKw, 0) + ' €/kWp', `${nf(kw, 1)} kWp installati`),
     cell('them', 'Prezzo al cliente · per kW installato', nf(t.priceKw, 0) + ' €/kWp', `${nf(t.priceKw / 1000, 3)} €/Wp`),
-    cell('us', 'Oneri della sicurezza · costo per noi', eur(t.sic), `${nf(t.sic / Math.max(t.cost, 1) * 100, 1)}% del costo · coordinamento CSP/CSE compreso`),
+    cell('us', 'Costi della sicurezza (All. XV) · costo per noi', eur(t.sic), `${nf(t.sicPct, 1)}% dei lavori · non soggetti a ribasso · coordinamento CSP/CSE a parte: ${eur(t.coord)}`),
     cell('us', 'Progettazione · costo per noi', eur(t.design), `${nf(t.design / Math.max(t.cost, 1) * 100, 1)}% del costo · pratiche e oneri di connessione a parte: ${eur(t.pratiche)}`)
   ].join('');
   const s = site(); $('#recapSub').textContent = `${s.name}${s.location ? ' · ' + s.location : ''} · ${R.res.length} sezion${R.res.length === 1 ? 'e' : 'i'} · IVA esclusa`;
@@ -2145,30 +2183,58 @@ document.addEventListener('click', (e) => {
   if (t.id === 'bkImport') return doImport($('#importTxt').value);
 });
 /* ================= Stampa ================= */
+function printFees(R) {
+  const f = R.sd.fees; if (!f || !(f.el || f.ed || f.sic)) return '';
+  const catL = { imp: 'Impianti ' + f.cat.imp, str: 'Strutture ' + f.cat.str, edi: 'Edilizia ' + f.cat.edi };
+  const part = (title, F, cats) => {
+    if (!F) return '';
+    cats = cats.filter(c => f.V[c] > 0);
+    const n = 2 + cats.length * 2;
+    return `<tr class="g"><td colspan="${n - 1}">${title}</td><td class="n">${eur(F.net * f.kS)}</td></tr>
+      <tr class="pr-vgp"><td></td><td>V · G · P</td>${cats.map(c => `<td colspan="2" class="n">${catL[c]} · V ${eur(f.V[c])} · G ${nf(f.G[c], 2)} · P ${nf(f.P[c], 4)}</td>`).join('')}</tr>` +
+      F.rows.map(q => `<tr><td><b>${q.code}</b></td><td>${esc(q.d)} <small>${q.ph}</small></td>${cats.map(c => `<td class="n mu">Q ${q[c] == null ? '—' : nf(q[c], 3)}</td><td class="n">${q[c] != null ? eur(q.cp[c]) : '—'}</td>`).join('')}</tr>`).join('');
+  };
+  const tb = (title, F, cats) => F ? `<table class="pr-t pr-fee"><tbody>${part(title, F, cats)}</tbody></table>` : '';
+  return `<div class="pr-keep"><h2>Compensi professionali · DM parametri</h2><p class="pr-note">CP = V × G × Q × P, con P = 0,03 + 10/V^0,4 · DM 17/06/2016 aggiornato dall'All. I.13 D.Lgs. 36/2023 · netti; con spese e oneri accessori ${nf(f.spese, 2)}%${f.kB > 1 ? ' e BIM +10%' : ''} · IVA e contributi esclusi</p>
+    ${tb('Opere elettriche', f.el, ['imp'])}${tb('Opere edili e strutturali', f.ed, ['str', 'edi'])}${tb('Coordinamento della sicurezza (CSP e CSE)', f.sic, ['imp', 'str', 'edi'])}
+    <table class="pr-t"><tbody><tr class="t"><td>Totale compensi · ${nf(f.total / Math.max(f.V.imp + f.V.str + f.V.edi, 1) * 100, 1)}% dell'importo lavori ${eur(f.V.imp + f.V.str + f.V.edi)}</td><td class="n">${eur(f.total)}</td></tr></tbody></table></div>`;
+}
 function printSite(full) {
   const s = site(); if (!s) return; const R = E.computeSite(s); const t = R.tot; const C = s.common;
   const today = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
-  const cell = (l, v, n) => `<div><span class="l">${l}</span><span class="v">${v}</span>${n ? `<span class="n">${n}</span>` : ''}</div>`;
+  const kw = R.sd.pdc, pk = (v) => kw > 0 ? nf(v / kw, 0) + ' €/kWp' : '—';
   const errs = R.checks.filter(c => c.lvl === 'err'), warns = R.checks.filter(c => c.lvl === 'warn');
-  let h = `<div class="pr-head"><div><h1>${esc(s.name)}</h1><div>${esc(s.location || '')}${s.client ? ' · Cliente: ' + esc(s.client) : ''}</div></div>
-    <div class="meta">Stima di costo impianto fotovoltaico<br>${today}<br>Documento interno · IVA esclusa</div></div>
-    <p class="pr-sub">${nf(R.sd.pdc, 1)} kWp DC · ${nf(R.sd.pac, 1)} kW AC · connessione ${R.sd.conn}${C.conn === 'auto' ? ' (automatica)' : ''} · ${R.res.length} sezion${R.res.length === 1 ? 'e' : 'i'} · ${nf(R.sd.nmod)} moduli · ${R.sd.ninv} inverter · durata stimata ${R.sd.daysTot} giorni lavorativi</p>
-    <div class="pr-grid">
-      ${cell('Costo per noi · totale', eur(t.cost), `costi comuni ${eur(t.commonTot)} · imprevisti ${eur(t.contingency)} · trasporto ${eur(t.transport)}`)}
-      ${cell('Prezzo al cliente · totale', eur(t.price), `markup ${nf(t.markup, 1)}% · margine ${nf(t.margin, 1)}% · utile ${eur(t.profit)}`)}
-      ${cell('Oneri della sicurezza', eur(t.sic), `${nf(t.sic / Math.max(t.cost, 1) * 100, 1)}% del costo`)}
-      ${cell('Costo per noi · per kWp', nf(t.costKw, 0) + ' €/kWp', `${nf(R.sd.pdc, 1)} kWp installati`)}
-      ${cell('Prezzo al cliente · per kWp', nf(t.priceKw, 0) + ' €/kWp', `${nf(t.priceKw / 1000, 3)} €/Wp`)}
-      ${cell('Progettazione', eur(t.design), `pratiche e connessione a parte: ${eur(t.pratiche)}`)}
+  const mini = (l, v, n, cls) => `<div class="${cls || ''}"><span class="l">${l}</span><span class="v">${v}</span>${n ? `<span class="n">${n}</span>` : ''}</div>`;
+  let h = `<div class="pr-head"><div><div class="pr-kick">Stima di costo · impianto fotovoltaico</div><h1>${esc(s.name)}</h1><div>${esc(s.location || '')}${s.client ? ' · Cliente: ' + esc(s.client) : ''}</div></div>
+    <div class="meta">${today}<br>Documento interno<br>IVA esclusa</div></div>
+    <p class="pr-sub">${nf(kw, 1)} kWp DC · ${nf(R.sd.pac, 1)} kW AC · connessione ${R.sd.conn}${C.conn === 'auto' ? ' (automatica)' : ''} · ${R.res.length} sezion${R.res.length === 1 ? 'e' : 'i'} · ${nf(R.sd.nmod)} moduli · ${R.sd.ninv} inverter · durata stimata ${R.sd.daysTot} giorni lavorativi${t.ug ? ` · ${t.ug} uomini-giorno` : ''}</p>
+    <div class="pr-hero">
+      <div class="us"><span class="l">Costo per noi</span><span class="v">${eur(t.cost)}</span><span class="k">${pk(t.cost)}</span><span class="n">costi comuni ${eur(t.commonTot)} · trasporto ${eur(t.transport)} · imprevisti ${eur(t.contingency)}</span></div>
+      <div class="them"><span class="l">Prezzo al cliente</span><span class="v">${eur(t.price)}</span><span class="k">${pk(t.price)} · ${nf(t.priceKw / 1000, 3)} €/Wp</span><span class="n">markup ${nf(t.markup, 1)}% · margine ${nf(t.margin, 1)}% · utile ${eur(t.profit)}</span></div>
+    </div>
+    <div class="pr-mini">
+      ${mini('Costi della sicurezza (All. XV)', eur(t.sic), `${nf(t.sicPct, 1)}% dei lavori · non soggetti a ribasso`, 'sic')}
+      ${mini('Coordinamento CSP/CSE', eur(t.coord), C.multi_imp !== false ? 'obbligatorio: più imprese' : 'impresa unica', 'sic')}
+      ${mini('Progettazione e DL', eur(t.design), `${nf(t.design / Math.max(t.cost, 1) * 100, 1)}% del costo`, 'pro')}
+      ${mini('Pratiche e connessione', eur(t.pratiche), 'TICA, GAUDÌ, Dogane, DiCo', 'pro')}
     </div>`;
   if (errs.length || warns.length) h += `<div class="pr-warn"><b>Verifiche aperte:</b> ${[...errs, ...warns].map(c => `${c.sec ? esc(c.sec) + ' – ' : ''}${esc(c.title)}`).join(' · ')}</div>`;
-  h += `<h2>Sezioni</h2><table><thead><tr><th>Sezione</th><th>Tipo</th><th class="n">kWp</th><th class="n">Moduli</th><th>Inverter</th><th class="n">Costo diretto</th><th class="n">Quota comune</th><th class="n">Costo</th><th class="n">€/kWp</th><th class="n">Prezzo</th></tr></thead><tbody>` +
-    R.res.map(r => `<tr><td>${esc(r.sec.name)}</td><td>${r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'}</td><td class="n">${nf(r.d.Pdc, 1)}</td><td class="n">${nf(r.d.Nmod)}</td><td>${r.d.Ninv} × ${nf(r.d.I.pac)} kW</td><td class="n">${eur(r.direct)}</td><td class="n">${eur(r.alloc - r.direct)}</td><td class="n">${eur(r.alloc)}</td><td class="n">${r.d.Pdc > 0 ? nf(r.alloc / r.d.Pdc, 0) : '—'}</td><td class="n">${eur(r.allocPrice)}</td></tr>`).join('') +
-    `<tr class="t"><td colspan="2">Totale sito</td><td class="n">${nf(R.sd.pdc, 1)}</td><td class="n">${nf(R.sd.nmod)}</td><td>${R.sd.ninv} inverter</td><td class="n">${eur(R.res.reduce((a, r) => a + r.direct, 0))}</td><td class="n">${eur(t.commonTot + t.transport + t.contingency)}</td><td class="n">${eur(t.cost)}</td><td class="n">${nf(t.costKw, 0)}</td><td class="n">${eur(t.price)}</td></tr></tbody></table>`;
+  h += `<h2>Sezioni del sito</h2><table class="pr-t"><thead><tr><th>Sezione</th><th class="n">kWp</th><th class="n">Moduli</th><th>Inverter</th><th class="n">Diretto</th><th class="n">Quota comune</th><th class="n c-us">Costo</th><th class="n c-us">€/kWp</th><th class="n c-them">Prezzo</th><th class="n c-them">€/kWp</th></tr></thead><tbody>` +
+    R.res.map(r => `<tr><td><b>${esc(r.sec.name)}</b><small>${r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'}</small></td><td class="n">${nf(r.d.Pdc, 1)}</td><td class="n">${nf(r.d.Nmod)}</td><td>${r.d.Ninv} × ${nf(r.d.I.pac)} kW</td><td class="n">${eur(r.direct)}</td><td class="n mu">${eur(r.alloc - r.direct)}</td><td class="n c-us">${eur(r.alloc)}</td><td class="n c-us">${r.d.Pdc > 0 ? nf(r.alloc / r.d.Pdc, 0) : '—'}</td><td class="n c-them">${eur(r.allocPrice)}</td><td class="n c-them">${r.d.Pdc > 0 ? nf(r.allocPrice / r.d.Pdc, 0) : '—'}</td></tr>`).join('') +
+    `<tr class="t"><td>Totale sito</td><td class="n">${nf(kw, 1)}</td><td class="n">${nf(R.sd.nmod)}</td><td>${R.sd.ninv} inverter</td><td class="n">${eur(R.res.reduce((a, r) => a + r.direct, 0))}</td><td class="n">${eur(t.commonTot + t.transport + t.contingency)}</td><td class="n c-us">${eur(t.cost)}</td><td class="n c-us">${nf(t.costKw, 0)}</td><td class="n c-them">${eur(t.price)}</td><td class="n c-them">${nf(t.priceKw, 0)}</td></tr></tbody></table>`;
   const cats = [...E.CAT_ORDER_ALL, 'Trasporto materiali', 'Imprevisti'].filter(k => R.byCat[k] > 0.5);
-  h += `<h2>Costo per categoria</h2><table><thead><tr><th>Categoria</th><th class="n">Costo</th><th class="n">% sul costo</th><th class="n">€/kWp</th></tr></thead><tbody>` +
-    cats.map(k => `<tr><td>${esc(k)}</td><td class="n">${eur(R.byCat[k])}</td><td class="n">${nf(R.byCat[k] / Math.max(t.cost, 1) * 100, 1)}%</td><td class="n">${R.sd.pdc > 0 ? nf(R.byCat[k] / R.sd.pdc, 0) : '—'}</td></tr>`).join('') +
-    `<tr class="t"><td>Totale</td><td class="n">${eur(t.cost)}</td><td class="n">100%</td><td class="n">${nf(t.costKw, 0)}</td></tr></tbody></table>`;
+  const cmax = Math.max(1, ...cats.map(k => R.byCat[k]));
+  const ccls = (k) => /sicurezza/i.test(k) ? 'sic' : /Progettazione/.test(k) ? 'pro' : '';
+  h += `<h2>Costo del sito per categoria</h2><table class="pr-t pr-cat"><thead><tr><th>Categoria</th><th class="bar"></th><th class="n">Costo</th><th class="n">% costo</th><th class="n">€/kWp</th></tr></thead><tbody>` +
+    cats.map(k => `<tr><td>${esc(k)}</td><td class="bar"><span class="cb ${ccls(k)}"><i style="width:${(R.byCat[k] / cmax * 100).toFixed(1)}%"></i></span></td><td class="n">${eur(R.byCat[k])}</td><td class="n">${nf(R.byCat[k] / Math.max(t.cost, 1) * 100, 1)}%</td><td class="n">${kw > 0 ? nf(R.byCat[k] / kw, 0) : '—'}</td></tr>`).join('') +
+    `<tr class="t"><td>Totale costo per noi</td><td></td><td class="n">${eur(t.cost)}</td><td class="n">100%</td><td class="n">${nf(t.costKw, 0)}</td></tr></tbody></table>`;
+  // costi della sicurezza: elenco voci per sezione con riferimento All. XV
+  const sicIt = R.allItems.filter(i => i.cat === E.SIC_CAT);
+  if (sicIt.length) h += `<div class="pr-keep"><h2>Costi della sicurezza · D.Lgs. 81/08 All. XV punto 4</h2><table class="pr-t"><thead><tr><th>Voce</th><th>Sezione</th><th>Rif.</th><th class="n">Q.tà</th><th>U.M.</th><th class="n">Totale</th></tr></thead><tbody>` +
+    sicIt.map(i => `<tr><td>${esc(i.desc)}</td><td class="mu">${esc(i.secName)}</td><td class="mu">${esc(i.ref || '')}</td><td class="n">${nf(i.qty, i.qty % 1 ? 1 : 0)}</td><td>${esc(i.um)}</td><td class="n">${eur(i.tot)}</td></tr>`).join('') +
+    `<tr class="t"><td colspan="5">Totale costi della sicurezza · ${nf(t.sicPct, 1)}% dei lavori (${eur(t.works)}) · non soggetti a ribasso</td><td class="n">${eur(t.sic)}</td></tr></tbody></table>
+    <p class="pr-note">${C.multi_imp !== false ? 'Più imprese in cantiere: CSP, CSE e PSC obbligatori (art. 90 c.3), notifica preliminare all\'ASL e all\'Ispettorato del lavoro (art. 99 c.1 lett. a).' : t.ug >= 200 ? `Impresa unica, ${t.ug} uomini-giorno ≥ 200: notifica preliminare obbligatoria (art. 99 c.1 lett. c).` : `Impresa unica, ${t.ug} uomini-giorno: CSP/CSE e notifica non obbligatori; restano POS e, in stabilimento attivo, DUVRI (art. 26).`} Il compenso di coordinamento (${eur(t.coord)}) è una spesa tecnica ed è conteggiato a parte.</p></div>`;
+  h += printFees(R);
   h += `<h2>Ipotesi principali</h2><table><tbody>
     <tr><td>Temperature di progetto</td><td>${C.t_min} °C / ${C.t_max} °C cella</td><td>Squadra</td><td>${C.team} persone × ${C.h_day} h · ${nf(C.cost_h, 1)} €/h</td></tr>
     <tr><td>Neve (pensiline)</td><td>zona ${esc(C.snow_zone)} · ${C.altitude} m s.l.m.</td><td>Distanza cantiere</td><td>${C.km} km</td></tr>
@@ -2211,7 +2277,7 @@ function recapTSV(R) {
   const L = [['Sito', s.name], ['Località', s.location || ''], ['kWp installati', nf(R.sd.pdc, 2)], ['Connessione', R.sd.conn], [],
     ['Sezione', 'Tipo', 'kWp', 'Costo diretto', 'Quota comune', 'Costo', 'Prezzo']];
   for (const r of R.res) L.push([r.sec.name, r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina', nf(r.d.Pdc, 2), nf(r.direct, 2), nf(r.alloc - r.direct, 2), nf(r.alloc, 2), nf(r.allocPrice, 2)]);
-  L.push([], ['Costo per noi totale', nf(t.cost, 2)], ['Prezzo al cliente totale', nf(t.price, 2)], ['Costo per noi €/kWp', nf(t.costKw, 2)], ['Prezzo al cliente €/kWp', nf(t.priceKw, 2)], ['Oneri della sicurezza', nf(t.sic, 2)], ['Progettazione', nf(t.design, 2)], ['Pratiche e connessione', nf(t.pratiche, 2)], ['Markup %', nf(t.markup, 2)], ['Margine %', nf(t.margin, 2)]);
+  L.push([], ['Costo per noi totale', nf(t.cost, 2)], ['Prezzo al cliente totale', nf(t.price, 2)], ['Costo per noi €/kWp', nf(t.costKw, 2)], ['Prezzo al cliente €/kWp', nf(t.priceKw, 2)], ['Costi della sicurezza (All. XV)', nf(t.sic, 2)], ['Coordinamento sicurezza CSP/CSE', nf(t.coord, 2)], ['Progettazione', nf(t.design, 2)], ['Pratiche e connessione', nf(t.pratiche, 2)], ['Markup %', nf(t.markup, 2)], ['Margine %', nf(t.margin, 2)]);
   return L.map(r => r.join('\t')).join('\n');
 }
 function backupText(onlySite) {
