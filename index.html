@@ -232,6 +232,9 @@ table.grid tfoot tr.tot td.num{font-family:var(--f-mono);font-weight:500}
 .tag{font-style:normal;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--sunk);color:var(--muted);border:1px solid var(--line);margin-right:4px}
 .recapbar{display:flex;gap:8px;flex-wrap:wrap}
 table.grid.compact{min-width:640px}
+table.grid td small{display:block;color:var(--muted);font-size:11.5px}
+table.grid tr.grp th{background:var(--sunk);font-family:var(--f-display);font-size:14.5px;text-align:left}
+table.grid tr.sub td{font-size:12px;background:var(--sunk)}
 details.okfold{margin-top:8px}
 details.okfold>summary{cursor:pointer;font-size:13px;color:var(--ok);font-weight:600;padding:6px 2px}
 details.okfold .checks{margin-top:6px}
@@ -1066,8 +1069,9 @@ function compute(S, mode, opts) {
   if (mode === 'roof') {
     if (S.prog_str) add(C.PRO, 'prog_str', 'Verifica strutturale della copertura esistente', 1, 'a corpo', Math.round(Math.max(1500, 3 * kWp)), { ref: 'NTC 2018 cap. 8' });
   } else {
-    add(C.PRO, 'prog_str', 'Progetto strutturale pensilina e fondazioni', 1, 'a corpo', Math.round(Math.max(3000, 12 * kWp)), { ref: 'NTC 2018' });
-    add(C.PRO, 'collaudo', 'Collaudo statico', 1, 'a corpo', Math.round(Math.max(1500, 4 * kWp)), { ref: 'DPR 380/2001 art. 67' });
+    const edSrc = S.ed_src || 'forfait';
+    if (edSrc === 'forfait') add(C.PRO, 'prog_str', 'Progetto strutturale pensilina e fondazioni', 1, 'a corpo', Math.round(Math.max(3000, 12 * kWp)), { ref: 'NTC 2018' });
+    if (!(edSrc === 'dm' && (!S.dmq_ed || S.dmq_ed.QdI03 !== false))) add(C.PRO, 'collaudo', 'Collaudo statico', 1, 'a corpo', Math.round(Math.max(1500, 4 * kWp)), { ref: 'DPR 380/2001 art. 67' });
     add(C.PRO, 'deposito', 'Denuncia/deposito opere strutturali', 1, 'a corpo', P.struct_cp_dep, { ref: 'DPR 380/2001 art. 65 e 93' });
     add(C.PRO, 'titolo', 'Titolo edilizio della pensilina (regime da verificare caso per caso)', 1, 'a corpo', P.titolo_cp, { ref: 'D.Lgs. 190/2024 · DPR 380/2001' });
   }
@@ -1122,6 +1126,49 @@ function compute(S, mode, opts) {
 
 
 /* ============================================================
+   COMPENSI PROFESSIONALI · DM 17/06/2016 (tavole Z-1, Z-2) come attualizzato dall'All. I.13 D.Lgs. 36/2023
+   CP = V × G × Q × P,  P = 0,03 + 10 / V^0,4
+   ============================================================ */
+const DM_CAT = {
+  'IA.03': { g: 1.15, name: 'IA.03 · Impianti elettrici e fotovoltaici a corredo di edifici (G 1,15)' },
+  'IA.04': { g: 1.30, name: 'IA.04 · Impianti elettrici e speciali di edifici complessi (G 1,30)' },
+  'IB.11': { g: 0.90, name: 'IB.11 · Campi fotovoltaici e parchi eolici (G 0,90)' },
+  'S.03': { g: 0.95, name: 'S.03 · Strutture in c.a. e verifiche, opere puntuali (G 0,95)' },
+  'S.04': { g: 0.90, name: 'S.04 · Strutture in metallo, legno, muratura e fondazioni correnti (G 0,90)' },
+  'E.20': { g: 0.95, name: 'E.20 · Manutenzione straordinaria e ristrutturazione di edifici esistenti (G 0,95)' },
+  'E.01': { g: 0.65, name: 'E.01 · Edifici industriali e artigianali di importanza corrente (G 0,65)' },
+  'E.17': { g: 0.65, name: 'E.17 · Aree esterne pertinenziali e viabilità di servizio (G 0,65)' }
+};
+// fase secondo All. I.13 art. 2: definitivo → PFTE, QbII.05 → esecutivo (non appalto integrato)
+const DM_Q = [
+  { c: 'QbI01', code: 'QbI.01', ph: 'PFTE', d: 'Relazioni, planimetrie, elaborati grafici', imp: 0.090, str: 0.090, edi: 0.09, def: true, grp: 'prog' },
+  { c: 'QbI02', code: 'QbI.02', ph: 'PFTE', d: 'Calcolo sommario della spesa, quadro economico', imp: 0.010, str: 0.010, edi: 0.01, def: true, grp: 'prog' },
+  { c: 'QbI16', code: 'QbI.16', ph: 'PFTE', d: 'Prime indicazioni per i piani di sicurezza', imp: 0.010, str: 0.010, edi: 0.01, def: true, grp: 'prog' },
+  { c: 'QbII01', code: 'QbII.01', ph: 'PFTE', d: 'Relazioni generali e tecniche, elaborati grafici, calcolo strutture e impianti', imp: 0.160, str: 0.180, edi: 0.23, def: true, grp: 'prog' },
+  { c: 'QbII12', code: 'QbII.12', ph: 'PFTE', d: 'Relazione sismica e sulle strutture (opere edili e strutturali)', imp: null, str: 0.030, edi: 0.03, def: true, grp: 'prog' },
+  { c: 'QbII18', code: 'QbII.18', ph: 'PFTE', d: 'Elaborati di progettazione antincendio', imp: 0.060, str: 0.060, edi: 0.06, def: false, grp: 'prog' },
+  { c: 'QbII05', code: 'QbII.05', ph: 'Esecutivo', d: 'Elenco prezzi, computo metrico estimativo, quadro economico', imp: 0.070, str: 0.040, edi: 0.07, def: true, grp: 'prog' },
+  { c: 'QbIII01', code: 'QbIII.01', ph: 'Esecutivo', d: 'Relazione generale e specialistiche, elaborati grafici, calcoli esecutivi', imp: 0.150, str: 0.120, edi: 0.07, def: true, grp: 'prog' },
+  { c: 'QbIII02', code: 'QbIII.02', ph: 'Esecutivo', d: 'Particolari costruttivi e decorativi', imp: 0.050, str: 0.130, edi: 0.13, def: true, grp: 'prog' },
+  { c: 'QbIII03', code: 'QbIII.03', ph: 'Esecutivo', d: 'Computo metrico estimativo, quadro economico, elenco prezzi', imp: 0.050, str: 0.030, edi: 0.04, def: true, grp: 'prog' },
+  { c: 'QbIII04', code: 'QbIII.04', ph: 'Esecutivo', d: 'Schema di contratto, capitolato speciale, cronoprogramma', imp: 0.020, str: 0.010, edi: 0.02, def: false, grp: 'prog' },
+  { c: 'QbIII05', code: 'QbIII.05', ph: 'Esecutivo', d: 'Piano di manutenzione dell\'opera', imp: 0.030, str: 0.025, edi: 0.02, def: true, grp: 'prog' },
+  { c: 'QbIII07', code: 'QbIII.07', ph: 'Esecutivo', d: 'Piano di sicurezza e coordinamento (CSP)', imp: 0.100, str: 0.100, edi: 0.1, def: true, grp: 'csp' },
+  { c: 'QcI01', code: 'QcI.01', ph: 'Esecuzione', d: 'Direzione lavori, assistenza al collaudo, prove di accettazione', imp: 0.320, str: 0.380, edi: 0.32, def: true, grp: 'dl' },
+  { c: 'QcI02', code: 'QcI.02', ph: 'Esecuzione', d: 'Liquidazione, rendicontazione tecnico-contabile', imp: 0.030, str: 0.020, edi: 0.03, def: false, grp: 'dl' },
+  { c: 'QcI11', code: 'QcI.11', ph: 'Esecuzione', d: 'Certificato di regolare esecuzione', imp: 0.040, str: 0.040, edi: 0.04, def: false, grp: 'dl' },
+  { c: 'QcI12', code: 'QcI.12', ph: 'Esecuzione', d: 'Coordinamento della sicurezza in esecuzione (CSE)', imp: 0.250, str: 0.250, edi: 0.25, def: true, grp: 'cse' },
+  { c: 'QdI03', code: 'QdI.03', ph: 'Collaudi', d: 'Collaudo statico (solo strutture)', imp: null, str: 0.220, edi: null, def: true, grp: 'coll' },
+  { c: 'QdI04', code: 'QdI.04', ph: 'Collaudi', d: 'Collaudo tecnico-funzionale degli impianti', imp: 0.180, str: null, edi: null, def: false, grp: 'coll' }
+];
+const DM_DEFAULTS = Object.fromEntries(DM_Q.map(q => [q.c, q.def]));
+const DM_DEF_EL = Object.fromEntries(DM_Q.filter(q => q.grp !== 'csp' && q.grp !== 'cse' && q.imp != null).map(q => [q.c, q.def && q.c !== 'QbII12']));
+const DM_DEF_ED = Object.fromEntries(DM_Q.filter(q => q.grp !== 'csp' && q.grp !== 'cse' && (q.str != null || q.edi != null)).map(q => [q.c, q.def]));
+const DM_DEF_SIC = { QbIII07: true, QcI12: true };
+const dmP = (V) => V > 0 ? 0.03 + 10 / Math.pow(V, 0.4) : 0;
+const dmSpese = (V) => V <= 1e6 ? 25 : V >= 25e6 ? 10 : 25 - 15 * (V - 1e6) / 24e6;   // DM 17/06/2016 art. 5: massimo ammesso
+
+/* ============================================================
    SITO: più sezioni (tetti, pensiline) con costi comuni contati una volta
    ============================================================ */
 const SITE_CAT = {
@@ -1131,7 +1178,7 @@ const SITE_CAT = {
 const CAT_ORDER_ALL = ['Moduli e ottimizzatori', 'Strutture di supporto', 'Inverter e accumulo', 'Cavi, connettori e vie cavi',
   'Quadri, protezioni e connessione', 'Monitoraggio', 'Opere edili in copertura', 'Opere civili e fondazioni',
   'Sicurezza (D.Lgs. 81/08)', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
-const DESIGN_IDS = ['prog_el', 'prog_str', 'collaudo', 'deposito', 'lightning', 'vvf_doc', 'dl'];
+const DESIGN_IDS = ['prog_el', 'prog_str', 'collaudo', 'deposito', 'lightning', 'vvf_doc', 'dl', 'dm_prog_el', 'dm_dl_el', 'dm_coll_el', 'dm_prog_ed', 'dm_dl_ed', 'dm_coll_ed', 'int_prog_el', 'int_dl_el', 'int_prog_ed', 'int_dl_ed'];
 
 function mergeSec(common, sec) {
   const o = Object.assign({}, common, sec.state);
@@ -1241,7 +1288,7 @@ function computeSite(site) {
   add(K.SIC, 'site_hut', 'Box spogliatoio e WC chimico (nolo mensile)', sd.months, 'mese', P.site_hut, { ref: 'D.Lgs. 81/08 All. XIII' });
   add(K.SIC, 'dpi', 'DPI collettivi, segnaletica di cantiere, estintori, cassetta PS', 1, 'a corpo', P.dpi + (res.length > 1 ? 150 * (res.length - 1) : 0));
   // progettazione e pratiche (una volta per sito)
-  if (C0.prog_el) add(K.PRO, 'prog_el', 'Progetto elettrico esecutivo (DM 37/08, CEI 0-2) e as-built', 1, 'a corpo', Math.round(Math.max(2000, 6 * kWp)), { ref: 'DM 37/08 art. 5' });
+  if ((C0.el_src || 'forfait') === 'forfait' && C0.prog_el) add(K.PRO, 'prog_el', 'Progetto elettrico esecutivo (DM 37/08, CEI 0-2) e as-built', 1, 'a corpo', Math.round(Math.max(2000, 6 * kWp)), { ref: 'DM 37/08 art. 5' });
   if (C0.lightning_doc) add(K.PRO, 'lightning', 'Valutazione rischio fulminazione', 1, 'a corpo', P.lightning * Math.max(1, res.filter(r => r.sec.mode === 'roof').length || 1), { ref: 'CEI EN 62305-2' });
   if (C0.vvf) add(K.PRO, 'vvf_doc', 'Valutazione/pratica prevenzione incendi FV', 1, 'a corpo', Math.round(1200 + 1 * kWp), { ref: 'DPR 151/2011 · Nota DCPREV 1324/2012' });
   add(K.PRO, 'conn_doc', 'Pratiche di connessione (TICA, GAUDÌ, regolamento di esercizio, GSE)', 1, 'a corpo', conn === 'MT' ? 2500 : 1200, { ref: 'TICA · CEI 0-16/0-21' });
@@ -1249,7 +1296,77 @@ function computeSite(site) {
   add(K.PRO, 'conn_cost', 'Corrispettivo di connessione (da preventivo del distributore)', C0.conn_cost > 0 ? 1 : 0, 'a corpo', C0.conn_cost);
   if (Pac > 20) add(K.PRO, 'dogane', 'Licenza di officina elettrica (Agenzia Dogane)', 1, 'a corpo', P.dogane, { ref: 'D.Lgs. 504/1995' });
   add(K.PRO, 'dico', 'Dichiarazione di conformità, verifiche SPI con cassetta prova relè', 1, 'a corpo', conn === 'MT' ? 1500 : 600, { ref: 'DM 37/08 · CEI 0-21/0-16' });
-  if (C0.dl) add(K.PRO, 'dl', 'Direzione lavori', 1, 'a corpo', Math.round(Math.max(1000, 2 * kWp)));
+  if ((C0.el_src || 'forfait') === 'forfait' && C0.dl) add(K.PRO, 'dl', 'Direzione lavori', 1, 'a corpo', Math.round(Math.max(1000, 2 * kWp)));
+  }
+
+  // compensi professionali: tre figure (opere elettriche, opere edili/strutturali, coordinamento sicurezza),
+  // ognuna esterna da DM parametri, interna a ore o forfettaria
+  const SRC = { el: C0.el_src || 'forfait', ed: C0.ed_src || 'forfait', sic: C0.sic_src || 'forfait' };
+  sd.src = SRC; sd.fees = null; sd.intAuto = null;
+  const discF = (C0.disc_mat || 0) / 100;
+  // importi lavori per categoria, separati automaticamente dalle voci del computo
+  const STR_IDS = new Set(['steel', 'clamps_cp', 'st_budget', 'sheet_cp', 'gutter_cp', 'plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'mdo_steel']);
+  const EDI_IDS = new Set(['asb_rem', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
+  let vImp = 0, vStr = 0, vEdi = 0;
+  for (const r of res) for (const it of r.items) {
+    if (it.cat === K.PRO) continue;
+    const cp = r.sec.mode === 'carport';
+    if (EDI_IDS.has(it.id)) vEdi += it.tot;
+    else if (cp && (STR_IDS.has(it.id) || it.id === 'crane' || it.id === 'excav')) vStr += it.tot;
+    else vImp += it.tot;
+  }
+  for (const it of items) if (it.cat !== K.PRO) vImp += it.qty * it.unit * (it.mat ? 1 - discF : 1);
+  const V = { imp: C0.dm_v_imp > 0 ? C0.dm_v_imp : vImp, str: C0.dm_v_str > 0 ? C0.dm_v_str : vStr, edi: C0.dm_v_edi > 0 ? C0.dm_v_edi : vEdi };
+  const Gc = { imp: (DM_CAT[C0.dm_cat_imp] || DM_CAT['IA.03']).g, str: (DM_CAT[C0.dm_cat_str] || DM_CAT['S.04']).g, edi: (DM_CAT[C0.dm_cat_edi] || DM_CAT['E.20']).g };
+  const speseAuto = dmSpese(V.imp + V.str + V.edi), spese = C0.dm_spese > 0 ? C0.dm_spese : speseAuto;
+  const kB = C0.dm_bim ? 1.1 : 1, kS = 1 + spese / 100;
+  const cp = (cat, q) => (q[cat] != null && V[cat] > 0) ? V[cat] * Gc[cat] * q[cat] * dmP(V[cat]) * kB : 0;
+  const fig = (cats, sel, def) => {
+    const S2 = Object.assign({}, def, sel || {}); const rows = []; const grp = { prog: 0, dl: 0, coll: 0, csp: 0, cse: 0 };
+    for (const q of DM_Q) { if (!(q.c in def) || !S2[q.c]) continue; const v = {}; let t = 0; for (const c of cats) { v[c] = cp(c, q); t += v[c]; } if (t <= 0) continue; rows.push(Object.assign({}, q, { cp: v, tot: t })); grp[q.grp] += t; }
+    return { rows, grp, net: Object.values(grp).reduce((a, b) => a + b, 0) };
+  };
+  sd.fees = { V, vAuto: { imp: vImp, str: vStr, edi: vEdi }, G: Gc, cat: { imp: C0.dm_cat_imp, str: C0.dm_cat_str, edi: C0.dm_cat_edi }, P: { imp: dmP(V.imp), str: dmP(V.str), edi: dmP(V.edi) }, spese, speseAuto, kB, kS };
+  const lab = `DM 17/06/2016 · All. I.13 D.Lgs. 36/2023 · spese e oneri ${fx(spese, 1)}%${C0.dm_bim ? ' · BIM +10%' : ''}`;
+  const nS = res.length, ch = C0.int_cost_h > 0 ? C0.int_cost_h : 45;
+  const Ved = V.str + V.edi;
+  sd.intAuto = {
+    prog_el: Math.round(24 + 0.15 * kWp + 8 * Math.max(0, nS - 1)), dl_el: Math.round(16 + 0.06 * kWp + 4 * nS),
+    prog_ed: Ved > 0 ? Math.round(16 + Ved / 5000) : 0, dl_ed: Ved > 0 ? Math.round(8 + Ved / 12000) : 0,
+    coord: Math.round(8 + 0.04 * kWp + 2 * nS)
+  };
+  if (res.length) {
+    // opere elettriche
+    if (SRC.el === 'dm') {
+      const f = fig(['imp'], C0.dmq_el, DM_DEF_EL); sd.fees.el = f;
+      add(K.PRO, 'dm_prog_el', `Progettazione opere elettriche e FV (PFTE + esecutivo) · ${C0.dm_cat_imp}`, f.grp.prog > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.prog * kS), { ref: lab });
+      add(K.PRO, 'dm_dl_el', 'Direzione lavori opere elettriche', f.grp.dl > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.dl * kS), { ref: lab });
+      add(K.PRO, 'dm_coll_el', 'Collaudo tecnico-funzionale impianti', f.grp.coll > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.coll * kS), { ref: lab });
+    } else if (SRC.el === 'interna') {
+      add(K.PRO, 'int_prog_el', 'Progettazione opere elettriche (personale interno)', C0.int_h_prog_el > 0 ? C0.int_h_prog_el : sd.intAuto.prog_el, 'h', ch);
+      add(K.PRO, 'int_dl_el', 'Direzione lavori opere elettriche (personale interno)', C0.int_h_dl_el > 0 ? C0.int_h_dl_el : sd.intAuto.dl_el, 'h', ch);
+    }
+    // opere edili e strutturali (pensiline, fondazioni, bonifica e rifacimento coperture, opere esterne)
+    if (Ved > 0 && SRC.ed === 'dm') {
+      const f = fig(['str', 'edi'], C0.dmq_ed, DM_DEF_ED); sd.fees.ed = f;
+      add(K.PRO, 'dm_prog_ed', `Progettazione opere edili e strutturali (PFTE + esecutivo) · ${[V.str > 0 ? C0.dm_cat_str : '', V.edi > 0 ? C0.dm_cat_edi : ''].filter(Boolean).join(' + ')}`, f.grp.prog > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.prog * kS), { ref: lab });
+      add(K.PRO, 'dm_dl_ed', 'Direzione lavori opere edili e strutturali', f.grp.dl > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.dl * kS), { ref: lab });
+      add(K.PRO, 'dm_coll_ed', 'Collaudo statico', f.grp.coll > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.coll * kS), { ref: lab + ' · DPR 380/2001 art. 67' });
+    } else if (Ved > 0 && SRC.ed === 'interna') {
+      add(K.PRO, 'int_prog_ed', 'Progettazione opere edili e strutturali (personale interno)', C0.int_h_prog_ed > 0 ? C0.int_h_prog_ed : sd.intAuto.prog_ed, 'h', ch);
+      add(K.PRO, 'int_dl_ed', 'Direzione lavori opere edili e strutturali (personale interno)', C0.int_h_dl_ed > 0 ? C0.int_h_dl_ed : sd.intAuto.dl_ed, 'h', ch);
+    }
+    // coordinamento sicurezza (unico per il cantiere, calcolato su tutte le categorie)
+    if (SRC.sic === 'dm') {
+      const f = fig(['imp', 'str', 'edi'], C0.dmq_sic, DM_DEF_SIC); sd.fees.sic = f;
+      add(K.SIC, 'dm_csp', 'Coordinamento sicurezza in progettazione (PSC)', f.grp.csp > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.csp * kS), { ref: lab + ' · D.Lgs. 81/08 art. 91' });
+      add(K.SIC, 'dm_cse', 'Coordinamento sicurezza in esecuzione (CSE)', f.grp.cse > 0 ? 1 : 0, 'a corpo', Math.round(f.grp.cse * kS), { ref: lab + ' · D.Lgs. 81/08 art. 92' });
+      if (!(f.grp.csp > 0) && !(f.grp.cse > 0)) chk('warn', 'Coordinamento della sicurezza escluso', 'Con più imprese in cantiere CSP e CSE sono obbligatori.', 'D.Lgs. 81/08 art. 90');
+    } else if (SRC.sic === 'interna') {
+      add(K.SIC, 'int_coord', 'Coordinamento sicurezza CSP/CSE (personale interno)', C0.int_h_coord > 0 ? C0.int_h_coord : sd.intAuto.coord, 'h', ch, { ref: 'D.Lgs. 81/08 art. 90–92' });
+    }
+    const tf = (f) => f ? f.net * kS : 0;
+    sd.fees.total = tf(sd.fees.el) + tf(sd.fees.ed) + tf(sd.fees.sic);
   }
 
   // totali
@@ -1258,7 +1375,7 @@ function computeSite(site) {
   for (const r of res) for (const it of r.items) { if (it.mat) sumMat += it.tot; sumAll += it.tot; }   // (sconto già applicato nelle sezioni)
   for (const it of items) { it.tot = it.qty * it.unit * (it.mat ? (1 - disc) : 1); if (it.mat) sumMat += it.tot; sumAll += it.tot; }
   const coordDef = Math.round(Math.max(1500, sumAll * C0.coord_pct / 100));
-  if (C0.coord_pct > 0 && res.length) {
+  if ((C0.sic_src || 'forfait') === 'forfait' && C0.coord_pct > 0 && res.length) {
     add(K.SIC, 'coord', `Coordinamento sicurezza CSP/CSE (${C0.coord_pct}% lavori, min 1.500 €)`, 1, 'a corpo', coordDef, { ref: 'D.Lgs. 81/08 art. 90–92' });
     const it = items[items.length - 1]; it.tot = it.qty * it.unit; sumAll += it.tot;
   }
@@ -1304,7 +1421,7 @@ function computeSite(site) {
   };
 }
 
-const api = { compute, computeSite, CAT_ORDER_ALL, ST_DEFAULTS, MOD_PRESETS, INV_PRESETS, ROOF_TYPES, PRICES, qsk, pickAC, nextIn, tica };
+const api = { compute, computeSite, DM_Q, DM_CAT, DM_DEFAULTS, DM_DEF_EL, DM_DEF_ED, DM_DEF_SIC, dmP, dmSpese, CAT_ORDER_ALL, ST_DEFAULTS, MOD_PRESETS, INV_PRESETS, ROOF_TYPES, PRICES, qsk, pickAC, nextIn, tica };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PVEngine = api;
 })(this);
 </script>
@@ -1323,6 +1440,10 @@ function commonDefault() {
     prog_el: true, lightning_doc: true, dl: true,
     coord_pct: 1.2, disc_mat: 0, transport: 3, contingency: 5,
     markup: 30, price: 0, price_mode: 'markup',
+    el_src: 'dm', ed_src: 'dm', sic_src: 'dm',
+    dm_cat_imp: 'IA.03', dm_cat_str: 'S.04', dm_cat_edi: 'E.20', dm_v_imp: 0, dm_v_str: 0, dm_v_edi: 0, dm_spese: 0, dm_bim: false,
+    dmq_el: Object.assign({}, E.DM_DEF_EL), dmq_ed: Object.assign({}, E.DM_DEF_ED), dmq_sic: Object.assign({}, E.DM_DEF_SIC),
+    int_cost_h: 45, int_h_prog_el: 0, int_h_dl_el: 0, int_h_prog_ed: 0, int_h_dl_ed: 0, int_h_coord: 0,
     ov: {}, qov: {}
   };
 }
@@ -1371,6 +1492,9 @@ function exampleSite() {
 function normalizeSite(x) {
   const s = Object.assign(newSite(), x || {});
   s.common = Object.assign(commonDefault(), (x && x.common) || {}); s.common.ov = (x && x.common && x.common.ov) || {}; s.common.qov = (x && x.common && x.common.qov) || {};
+  const xc = (x && x.common) || {};
+  if (xc.prog_source && !xc.el_src) { s.common.el_src = s.common.ed_src = s.common.sic_src = xc.prog_source; }   // migrazione dalla versione con scelta unica
+  s.common.dmq_el = Object.assign({}, E.DM_DEF_EL, xc.dmq_el || {}); s.common.dmq_ed = Object.assign({}, E.DM_DEF_ED, xc.dmq_ed || {}); s.common.dmq_sic = Object.assign({}, E.DM_DEF_SIC, xc.dmq_sic || {});
   s.sections = ((x && x.sections) || []).filter(Boolean).map(sec => {
     const mode = sec.mode === 'carport' ? 'carport' : 'roof';
     const d = sectionStateDefault(mode); const st = sec.state || {};
@@ -1610,11 +1734,42 @@ const COMMON_GROUPS = [
     { k: 'km', l: 'Distanza cantiere (sola andata)', u: 'km' }, { k: 'eur_km', l: 'Costo chilometrico', u: '€/km', step: 0.01 },
     { k: 'trasf_pp', l: 'Trasferta (vitto e alloggio)', u: '€/gg·pers' }
   ] },
-  { id: 'eco', title: 'Progettazione e condizioni economiche', sub: 'Una volta per sito', fields: [
-    { k: 'prog_el', l: 'Progetto elettrico esecutivo', t: 'chk' },
-    { k: 'lightning_doc', l: 'Valutazione rischio fulminazione', t: 'chk' },
-    { k: 'dl', l: 'Direzione lavori', t: 'chk' },
-    { k: 'coord_pct', l: 'Coordinamento sicurezza', u: '% lavori', step: 0.1, h: 'Obbligatorio con più imprese in cantiere (art. 90 D.Lgs. 81/08). 0 = escluso.' },
+  { id: 'pel', title: 'Progettazione e DL · opere elettriche', sub: 'Impianto FV, quadri, connessione', fields: [
+    { k: 'el_src', l: 'Affidamento', t: 'sel', wide: true, o: [['dm', 'Esterna · compensi da DM parametri'], ['interna', 'Interna · ore × costo orario'], ['forfait', 'Esterna · stima forfettaria']], h: 'DM: CP = V × G × Q × P con P = 0,03 + 10/V^0,4 (DM 17/06/2016 · All. I.13 D.Lgs. 36/2023), più spese e oneri accessori.' },
+    { k: 'dm_cat_imp', l: 'Categoria (tavola Z-1)', t: 'sel', wide: true, o: [['IA.03', E.DM_CAT['IA.03'].name], ['IA.04', E.DM_CAT['IA.04'].name], ['IB.11', E.DM_CAT['IB.11'].name]], show: (s) => s.el_src === 'dm' },
+    { k: 'dm_v_imp', l: 'Importo lavori elettrici V', u: '€', step: 100, auto: (r) => r.sd && r.sd.fees ? nf(r.sd.fees.vAuto.imp, 0) : '', show: (s) => s.el_src === 'dm', h: 'Vuoto = moduli, strutture di fissaggio su tetto, inverter, cavi, quadri, sicurezza, noli e posa.' },
+    { k: 'int_h_prog_el', l: 'Ore di progettazione', u: 'h', auto: (r) => r.sd && r.sd.intAuto ? r.sd.intAuto.prog_el : '', show: (s) => s.el_src === 'interna', h: 'Vuoto = 24 h + 0,15 h/kWp + 8 h per sezione aggiuntiva (stima).' },
+    { k: 'int_h_dl_el', l: 'Ore di direzione lavori', u: 'h', auto: (r) => r.sd && r.sd.intAuto ? r.sd.intAuto.dl_el : '', show: (s) => s.el_src === 'interna', h: 'Vuoto = 16 h + 0,06 h/kWp + 4 h per sezione (stima).' },
+    { k: 'prog_el', l: 'Progetto elettrico esecutivo', t: 'chk', show: (s) => s.el_src === 'forfait' },
+    { k: 'dl', l: 'Direzione lavori', t: 'chk', show: (s) => s.el_src === 'forfait' }
+  ] },
+  { id: 'dmq_el', title: 'Prestazioni · opere elettriche', sub: 'Tavola Z-2 · colonna impianti', show: (s) => s.el_src === 'dm',
+    fields: E.DM_Q.filter(q => q.c in E.DM_DEF_EL).map(q => ({ k: 'dmq_el.' + q.c, t: 'chk', l: `${q.code} · ${q.d}`, h: `${q.ph} · Q ${String(q.imp).replace('.', ',')}` })) },
+  { id: 'ped', title: 'Progettazione e DL · opere edili e strutturali', sub: 'Pensiline, fondazioni, bonifica e rifacimento coperture, opere esterne', fields: [
+    { k: 'ed_src', l: 'Affidamento', t: 'sel', wide: true, o: [['dm', 'Esterna · compensi da DM parametri'], ['interna', 'Interna · ore × costo orario'], ['forfait', 'Esterna · stima forfettaria']], h: 'Importi separati in automatico dal computo. Senza opere edili o strutturali il compenso è zero.' },
+    { k: 'dm_cat_str', l: 'Categoria strutture (tavola Z-1)', t: 'sel', wide: true, o: [['S.04', E.DM_CAT['S.04'].name], ['S.03', E.DM_CAT['S.03'].name]], show: (s) => s.ed_src === 'dm' },
+    { k: 'dm_v_str', l: 'Importo lavori strutturali V', u: '€', step: 100, auto: (r) => r.sd && r.sd.fees ? nf(r.sd.fees.vAuto.str, 0) : '', show: (s) => s.ed_src === 'dm', h: 'Vuoto = carpenteria e fissaggi pensiline, lamiere, gronde, plinti/micropali, terre, indagine geologica, gru ed escavatore, montaggio carpenteria.' },
+    { k: 'dm_cat_edi', l: 'Categoria edilizia (tavola Z-1)', t: 'sel', wide: true, o: [['E.20', E.DM_CAT['E.20'].name], ['E.01', E.DM_CAT['E.01'].name], ['E.17', E.DM_CAT['E.17'].name]], show: (s) => s.ed_src === 'dm' },
+    { k: 'dm_v_edi', l: 'Importo lavori edili V', u: '€', step: 100, auto: (r) => r.sd && r.sd.fees ? nf(r.sd.fees.vAuto.edi, 0) : '', show: (s) => s.ed_src === 'dm', h: 'Vuoto = bonifica amianto, nuova copertura, lattonerie, pavimentazioni, cavidotti, pozzetti, segnaletica e paracolpi.' },
+    { k: 'int_h_prog_ed', l: 'Ore di progettazione', u: 'h', auto: (r) => r.sd && r.sd.intAuto ? r.sd.intAuto.prog_ed : '', show: (s) => s.ed_src === 'interna', h: 'Vuoto = 16 h + 1 h ogni 5.000 € di opere (stima). Il collaudo statico resta esterno.' },
+    { k: 'int_h_dl_ed', l: 'Ore di direzione lavori', u: 'h', auto: (r) => r.sd && r.sd.intAuto ? r.sd.intAuto.dl_ed : '', show: (s) => s.ed_src === 'interna', h: 'Vuoto = 8 h + 1 h ogni 12.000 € di opere (stima).' }
+  ] },
+  { id: 'dmq_ed', title: 'Prestazioni · opere edili e strutturali', sub: 'Tavola Z-2 · colonne strutture ed edilizia', show: (s) => s.ed_src === 'dm',
+    fields: E.DM_Q.filter(q => q.c in E.DM_DEF_ED).map(q => ({ k: 'dmq_ed.' + q.c, t: 'chk', l: `${q.code} · ${q.d}`, h: `${q.ph} · Q strutture ${q.str == null ? '—' : String(q.str).replace('.', ',')} · Q edilizia ${q.edi == null ? '—' : String(q.edi).replace('.', ',')}` })) },
+  { id: 'psic', title: 'Coordinamento della sicurezza', sub: 'Unico per il cantiere, su tutte le categorie', fields: [
+    { k: 'sic_src', l: 'Affidamento', t: 'sel', wide: true, o: [['dm', 'Esterna · compensi da DM parametri'], ['interna', 'Interna · ore × costo orario'], ['forfait', 'Esterna · stima forfettaria']] },
+    { k: 'dmq_sic.QbIII07', l: 'QbIII.07 · Piano di sicurezza e coordinamento (CSP)', t: 'chk', show: (s) => s.sic_src === 'dm', h: 'Q 0,10 su ogni categoria' },
+    { k: 'dmq_sic.QcI12', l: 'QcI.12 · Coordinamento della sicurezza in esecuzione (CSE)', t: 'chk', show: (s) => s.sic_src === 'dm', h: 'Q 0,25 su ogni categoria' },
+    { k: 'int_h_coord', l: 'Ore di coordinamento', u: 'h', auto: (r) => r.sd && r.sd.intAuto ? r.sd.intAuto.coord : '', show: (s) => s.sic_src === 'interna', h: 'Vuoto = 8 h + 0,04 h/kWp + 2 h per sezione (stima).' },
+    { k: 'coord_pct', l: 'Coordinamento sicurezza', u: '% lavori', step: 0.1, show: (s) => s.sic_src === 'forfait', h: 'Obbligatorio con più imprese in cantiere (art. 90 D.Lgs. 81/08). 0 = escluso.' }
+  ] },
+  { id: 'pcom', title: 'Parametri comuni dei compensi', sub: 'Spese accessorie, BIM, costo interno', fields: [
+    { k: 'dm_spese', l: 'Spese e oneri accessori (DM)', u: '%', step: 0.5, auto: (r) => r.sd && r.sd.fees ? nf(r.sd.fees.speseAuto, 2) : '', h: 'Vuoto = massimo dell\'art. 5: 25% fino a 1 M€, 10% oltre 25 M€, interpolato sull\'importo totale.' },
+    { k: 'dm_bim', l: 'Progettazione in BIM (+10% onorari)', t: 'chk' },
+    { k: 'int_cost_h', l: 'Costo orario personale tecnico interno', u: '€/h', step: 0.5 },
+    { k: 'lightning_doc', l: 'Valutazione rischio fulminazione (voce a parte)', t: 'chk' }
+  ] },
+  { id: 'eco', title: 'Condizioni economiche', sub: 'Sconti, trasporto, imprevisti', fields: [
     { k: 'disc_mat', l: 'Sconto medio su listino materiali', u: '%', step: 0.5 },
     { k: 'transport', l: 'Trasporto materiali', u: '% mat.', step: 0.5 },
     { k: 'contingency', l: 'Imprevisti', u: '%', step: 0.5 }
@@ -1647,12 +1802,13 @@ function buildForm(container, groups, scope, objFn, resFn) {
       <div class="fgrid">${g.fields.map(f => { fields.push(f); return fieldHTML(f, o, scope); }).join('')}</div></details>`;
   }).join('');
   $$('details.sec', container).forEach(el => el.addEventListener('toggle', () => { const st = store.get(K_OPEN, {}); st[keyOf(el.dataset.g)] = el.open; store.set(K_OPEN, st); }));
-  FORM = { scope, fields, obj: objFn, res: resFn };
+  FORM = { scope, fields, groups, obj: objFn, res: resFn };
   refreshVisibility();
 }
 function refreshVisibility() {
   if (!FORM) return; const o = FORM.obj(); if (!o) return;
   for (const f of FORM.fields) { const el = document.getElementById(fid(FORM.scope, f.k, f)); const row = el && el.closest('[data-row]'); if (row) row.hidden = f.show ? !f.show(o) : false; }
+  for (const g of FORM.groups || []) { const det = document.querySelector(`details.sec[data-g="${g.id}"]`); if (det) det.hidden = g.show ? !g.show(o) : false; }
 }
 function syncForm() {
   if (!FORM) return; const o = FORM.obj(); if (!o) return;
@@ -1669,7 +1825,7 @@ function refreshAuto() {
     if (!f.auto) continue; const el = document.getElementById(fid(FORM.scope, f.k, f)); if (!el) continue;
     try { el.placeholder = 'auto ' + f.auto(r, o); } catch (e) {}
   }
-  $$('[data-rng]').forEach(el => { const a = r.d.stAuto; if (!a) return; el.textContent = `Mercato: ${nf(a.kwp, 0)} €/kWp (intervallo ${nf(a.lo, 0)}–${nf(a.hi, 0)})` + (a.sizeK !== 1 ? ` · fattore taglia ${nf(a.sizeK, 2)}` : '') + (a.snowK ? ` · fattore neve ${nf(a.snowK, 2)}` : ''); });
+  $$('[data-rng]').forEach(el => { const a = r.d && r.d.stAuto; if (!a) return; el.textContent = `Mercato: ${nf(a.kwp, 0)} €/kWp (intervallo ${nf(a.lo, 0)}–${nf(a.hi, 0)})` + (a.sizeK !== 1 ? ` · fattore taglia ${nf(a.sizeK, 2)}` : '') + (a.snowK ? ` · fattore neve ${nf(a.snowK, 2)}` : ''); });
   const ms = document.getElementById('src_' + FORM.scope); if (ms && o.mod) ms.textContent = o.mod.src ? 'Fonte: ' + o.mod.src : 'Valori inseriti a mano';
 }
 
@@ -1740,7 +1896,7 @@ function renderSite() {
   app.R = E.computeSite(s);
   renderTabs();
   const form = $('#form');
-  if (app.tab === 'common') { buildForm(form, COMMON_GROUPS, 'c', () => site().common, () => null); }
+  if (app.tab === 'common') { buildForm(form, COMMON_GROUPS, 'c', () => site().common, () => app.R); }
   else if (app.tab === 'recap') { FORM = null; form.innerHTML = ''; }
   else { const sec = curSec(); buildForm(form, secGroups(sec.mode), sec.id, () => (curSec() || {}).state, () => secRes(app.tab)); }
   $('#secBar').hidden = !curSec();
@@ -1762,7 +1918,7 @@ function update(fromRender) {
   if (!fromRender) renderTabs();
   const L = $('#lower');
   if (app.tab === 'recap') { $('#form').innerHTML = recapTableHTML(R); L.innerHTML = boqBlock('Costi comuni di sito', 'Connessione, pratiche, cantiere e coordinamento: contati una sola volta.', R.items, 'c', site().common.ov, R.tot, true) + checksBlock(R.checks, true); }
-  else if (app.tab === 'common') L.innerHTML = boqBlock('Costi comuni di sito', 'Calcolati sulla potenza totale del sito. Prezzi unitari modificabili.', R.items, 'c', site().common.ov, R.tot, true) + checksBlock(R.siteChecks, false);
+  else if (app.tab === 'common') L.innerHTML = feesBlock(R) + boqBlock('Costi comuni di sito', 'Calcolati sulla potenza totale del sito.', R.items, 'c', site().common.ov, R.tot, true) + checksBlock(R.siteChecks, false);
   else {
     const r = secRes(app.tab); const sec = curSec();
     if (!r || !sec) L.innerHTML = '';
@@ -1855,6 +2011,22 @@ function boqBlock(title, sub, items, scope, ov, tot, isCommon) {
   const nEd = items.filter(i => i.edited).length;
   return `<section class="blk"><div class="blkhead"><div><h2>${esc(title)}</h2><p>${esc(sub)} I prezzi unitari sono modificabili; le quantità si impostano nei dati sopra.</p></div><div class="boqbar"><span class="muted">${nEd ? (nEd === 1 ? '1 prezzo modificato' : nEd + ' prezzi modificati') : 'Prezzi di riferimento'}</span>${nEd ? `<button class="btn sm" data-rstall="${scope}" type="button">Ripristina prezzi</button>` : ''}</div></div>
   <div class="tablewrap"><table class="boq"><thead><tr><th>Voce</th><th class="num">Q.tà</th><th>U.M.</th><th class="num">Prezzo unit. €</th><th class="num">Totale</th></tr></thead>${html}${foot}</table></div></section>`;
+}
+function feesBlock(R) {
+  const f = R.sd.fees; if (!f || !(f.el || f.ed || f.sic)) return '';
+  const catL = { imp: 'impianti ' + f.cat.imp, str: 'strutture ' + f.cat.str, edi: 'edilizia ' + f.cat.edi };
+  const part = (title, F, cats) => {
+    if (!F) return '';
+    const rows = F.rows.map(q => `<tr><td><b>${q.code}</b></td><td>${esc(q.d)}<small>${q.ph}</small></td>${cats.map(c => `<td class="num">${q[c] == null ? '—' : nf(q[c], 3)}</td><td class="num">${f.V[c] > 0 && q[c] != null ? eur(q.cp[c]) : '—'}</td>`).join('')}</tr>`).join('');
+    return `<tr class="grp"><th colspan="${2 + cats.length * 2}">${title}</th></tr>
+      <tr class="sub"><td></td><td class="muted">V · G · P</td>${cats.map(c => `<td colspan="2" class="num muted">${catL[c]} · ${eur(f.V[c])} · G ${nf(f.G[c], 2)} · P ${nf(f.P[c], 4)}</td>`).join('')}</tr>
+      ${rows || `<tr><td colspan="${2 + cats.length * 2}" class="empty">Nessuna prestazione selezionata.</td></tr>`}
+      <tr><td colspan="${cats.length * 2 + 1}">Compenso netto${f.kB > 1 ? ' (BIM +10%)' : ''} · con spese e oneri ${nf(f.spese, 2)}%</td><td class="num"><b>${eur(F.net * f.kS)}</b></td></tr>`;
+  };
+  const block = (title, F, cats) => F ? `<div class="tablewrap" style="margin-bottom:10px"><table class="grid compact boq"><thead><tr><th>Codice</th><th>Prestazione</th>${cats.map(c => `<th class="num">Q ${c === 'imp' ? 'imp.' : c === 'str' ? 'str.' : 'edil.'}</th><th class="num">Compenso</th>`).join('')}</tr></thead><tbody>${part(title, F, cats)}</tbody></table></div>` : '';
+  return `<section class="blk"><div class="blkhead"><div><h2>Compensi professionali · DM parametri</h2><p>CP = V × G × Q × P, P = 0,03 + 10/V^0,4 · DM 17/06/2016 come attualizzato dall'All. I.13 D.Lgs. 36/2023 · IVA e contributi previdenziali esclusi</p></div><div class="boqbar"><b class="big" style="font-size:20px">${eur(f.total)}</b></div></div>
+  ${block('Opere elettriche', f.el, ['imp'])}${block('Opere edili e strutturali', f.ed, ['str', 'edi'])}${block('Coordinamento della sicurezza (CSP e CSE)', f.sic, ['imp', 'str', 'edi'])}
+  <p class="muted" style="font-size:12.5px;margin:6px 0 0">Totale compensi pari al ${nf(f.total / Math.max(f.V.imp + f.V.str + f.V.edi, 1) * 100, 1)}% dell'importo lavori (${eur(f.V.imp + f.V.str + f.V.edi)}). Nel computo: progettazione, DL e collaudi in "Progettazione"; CSP e CSE in "Sicurezza".</p></section>`;
 }
 function renderRecap(R) {
   const t = R.tot, kw = R.sd.pdc;
@@ -1961,6 +2133,7 @@ function printSite(full) {
   h += `<h2>Ipotesi principali</h2><table><tbody>
     <tr><td>Temperature di progetto</td><td>${C.t_min} °C / ${C.t_max} °C cella</td><td>Squadra</td><td>${C.team} persone × ${C.h_day} h · ${nf(C.cost_h, 1)} €/h</td></tr>
     <tr><td>Neve (pensiline)</td><td>zona ${esc(C.snow_zone)} · ${C.altitude} m s.l.m.</td><td>Distanza cantiere</td><td>${C.km} km</td></tr>
+    <tr><td>Progettazione e DL</td><td colspan="3">${['el', 'ed', 'sic'].map(k => { const src = { el: C.el_src, ed: C.ed_src, sic: C.sic_src }[k]; const nm = { el: 'elettrico', ed: 'edile/strutturale', sic: 'sicurezza' }[k]; const F = R.sd.fees && R.sd.fees[k]; return `${nm}: ${src === 'dm' ? 'DM parametri' + (F ? ' ' + eur(F.net * R.sd.fees.kS) : '') : src === 'interna' ? 'interna' : 'forfait'}`; }).join(' · ')}${R.sd.fees && R.sd.fees.total ? ` · V impianti ${eur(R.sd.fees.V.imp)} (${esc(C.dm_cat_imp)}), strutture ${eur(R.sd.fees.V.str)} (${esc(C.dm_cat_str)}), edilizia ${eur(R.sd.fees.V.edi)} (${esc(C.dm_cat_edi)})` : ''}</td></tr>
     <tr><td>Trasporto / imprevisti</td><td>${nf(C.transport, 1)}% / ${nf(C.contingency, 1)}%</td><td>Sconto materiali</td><td>${nf(C.disc_mat, 1)}%</td></tr>
     ${R.res.map(r => `<tr><td>${esc(r.sec.name)}</td><td colspan="3">${esc(r.sec.state.mod ? r.sec.state.mod.name : '')} · ${r.sec.mode === 'roof' ? esc((E.ROOF_TYPES[r.sec.state.roof_type] || {}).name || '') : `${r.d.stalls || 0} stalli`} · struttura ${r.sec.state.st && r.sec.state.st.mode === 'budget' ? 'a budget' : 'scomposta'}${r.d.Ns ? ` · stringhe ${r.d.Nstr} × ${r.d.Ns}` : ''}</td></tr>`).join('')}
   </tbody></table>`;
