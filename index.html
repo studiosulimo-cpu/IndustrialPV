@@ -510,12 +510,12 @@ const INV_PRESETS = {
 
 /* ---------- Tipologie di copertura ---------- */
 const ROOF_TYPES = {
-  grecata: { name: 'Lamiera grecata / pannello sandwich · complanare', fill: 0.80, h: 0.28, ballast: 0, skg: 1.5, kit: 'minirail', mkt: [25, 15, 35] },
-  tegolo:  { name: 'Tegolo / shed prefabbricato in c.a.', fill: 0.70, h: 0.40, ballast: 0, skg: 4, kit: 'rail_bracket', mkt: [45, 35, 60] },
-  piana_s: { name: 'Piana con guaina · zavorrata Sud 10–15°', fill: 0.55, h: 0.45, ballast: 60, skg: 6, kit: 'ballast_s', mkt: [70, 55, 90] },
-  piana_eo:{ name: 'Piana con guaina · zavorrata Est-Ovest 10°', fill: 0.80, h: 0.38, ballast: 30, skg: 5, kit: 'ballast_eo', mkt: [50, 40, 65] },
-  tegole:  { name: 'Coppi / tegole in laterizio · ganci', fill: 0.75, h: 0.45, ballast: 0, skg: 3, kit: 'rail_hook', mkt: [50, 40, 65] },
-  amianto: { name: 'Fibrocemento (amianto) · bonifica + nuovo sandwich', fill: 0.80, h: 0.28, ballast: 0, skg: 1.5, kit: 'minirail', mkt: [25, 15, 35] }
+  grecata: { name: 'Lamiera grecata / pannello sandwich · complanare', frag: 'parz', sky: 0.05, fill: 0.80, h: 0.28, ballast: 0, skg: 1.5, kit: 'minirail', mkt: [25, 15, 35] },
+  tegolo:  { name: 'Tegolo / shed prefabbricato in c.a.', frag: 'parz', sky: 0.12, fill: 0.70, h: 0.40, ballast: 0, skg: 4, kit: 'rail_bracket', mkt: [45, 35, 60] },
+  piana_s: { name: 'Piana con guaina · zavorrata Sud 10–15°', frag: 'no', sky: 0.02, fill: 0.55, h: 0.45, ballast: 60, skg: 6, kit: 'ballast_s', mkt: [70, 55, 90] },
+  piana_eo:{ name: 'Piana con guaina · zavorrata Est-Ovest 10°', frag: 'no', sky: 0.02, fill: 0.80, h: 0.38, ballast: 30, skg: 5, kit: 'ballast_eo', mkt: [50, 40, 65] },
+  tegole:  { name: 'Coppi / tegole in laterizio · ganci', frag: 'tot', pitched: true, sky: 0, fill: 0.75, h: 0.45, ballast: 0, skg: 3, kit: 'rail_hook', mkt: [50, 40, 65] },
+  amianto: { name: 'Fibrocemento (amianto) · bonifica e rifacimento', frag: 'tot', sky: 0.05, fill: 0.80, h: 0.28, ballast: 0, skg: 1.5, kit: 'minirail', mkt: [25, 15, 35] }
 };
 
 /* ---------- Struttura di montaggio: valori di partenza (stime C&I 2026, da sostituire con offerta) ---------- */
@@ -587,12 +587,12 @@ const PRICES = {
   // monitoraggio
   logger: 1100, meter: 450, router: 250,
   // opere edili / civili
-  asb_rem: 22, sandwich: 38, flashing: 25,
+  asb_rem: 16, sandwich: 42, redo_grec: 26, flashing: 25, asb_plan: 900, asb_mon: 280,
   plinth_m3: 260, anchor_kit: 120, asphalt: 30, soil: 25, micropile_m: 90,
   geo: 2500, trench: 55, pit: 220, led: 190, ev: 1700, bumper: 95, marking: 25,
   // sicurezza
   parap_ms: 23, parap_nolo: 2.0, scaf_ms: 24, scaf_nolo: 2.8, tower_ms: 1200, tower_nolo: 150,
-  skylight: 18, lifeline: 55, lifeline_doc: 600, fence: 18.5, fence_nolo: 1.1, site_hut: 450, dpi: 500, meet: 120,
+  skylight: 10.93, skylight_nolo: 0.84, nets_ms: 12.66, nets_nolo: 0, walk_ms: 12.43, walk_nolo: 1.22, parapC_ms: 30, parapC_nolo: 15, fall_kit: 1028, lifeline: 55, lifeline_doc: 600, fence: 3.70, fence_nolo: 0.46, site_hut: 550.32, site_hut_n: 244.57, dpi: 500, meet: 70,
   // noli
   crane: 950, truck_crane: 650, hoist: 190, hoist_tr: 400, ple: 220, ple_tr: 300, telehandler: 260, excav: 480,
   // progettazione e pratiche (minimi / €/kWp gestiti nel codice)
@@ -695,7 +695,6 @@ function compute(S, mode, opts) {
 
   if (mode === 'roof') {
     d.perimeter = S.perimeter > 0 ? S.perimeter : Math.round(4.24 * Math.sqrt(S.roof_area));   // pianta rettangolare 2:1
-    d.skylight = (typeof S.skylight_m2 === 'number') ? S.skylight_m2 : Math.round(0.05 * S.roof_area);
     d.towers = S.towers > 0 ? S.towers : Math.max(1, Math.ceil(S.roof_area / 3000));
   }
   /* ---- dimensionamento stringhe (funzione di un inverter) ---- */
@@ -1005,11 +1004,29 @@ function compute(S, mode, opts) {
   }
 
   /* ---- Opere civili / edili ---- */
-  if (mode === 'roof' && S.roof_type === 'amianto') {
-    const m2 = S.asb_m2 > 0 ? S.asb_m2 : S.roof_area;
-    add(C.CIV, 'asb_rem', 'Bonifica amianto: rimozione, confezionamento, trasporto e smaltimento (ditta iscritta cat. 10)', m2, 'm²', P.asb_rem, { ref: 'D.Lgs. 81/08 Tit. IX · DM 06/09/1994' });
-    add(C.CIV, 'sandwich', 'Nuova copertura in pannello sandwich coibentato (fornitura e posa)', m2, 'm²', P.sandwich);
-    add(C.CIV, 'flashing', 'Lattonerie di colmo, gronda e scossaline', d.perimeter, 'm', P.flashing);
+  if (mode === 'roof') {
+    // bonifica amianto e rifacimento: indipendenti dalla tipologia (amianto = attiva di default su tutta la copertura)
+    const RTy = ROOF_TYPES[S.roof_type] || ROOF_TYPES.grecata;
+    d.asbOn = !!S.asb_on || S.roof_type === 'amianto';
+    d.asbM2 = d.asbOn ? (S.asb_m2 > 0 ? S.asb_m2 : (S.roof_type === 'amianto' ? S.roof_area : 0)) : 0;
+    d.redo = d.asbOn ? (S.asb_redo || 'sandwich') : 'nessuno';
+    d.redoM2 = d.redo === 'nessuno' ? 0 : (S.redo_m2 > 0 ? S.redo_m2 : d.asbM2);
+    d.asbDays = d.asbM2 > 0 ? Math.ceil(d.asbM2 / 250) : 0;
+    if (d.asbOn && !(d.asbM2 > 0)) chk('warn', 'Bonifica amianto senza superficie', 'Inserire i m² da bonificare.', 'D.Lgs. 81/08 Tit. IX');
+    if (d.asbM2 > 0) {
+      add(C.CIV, 'asb_rem', 'Bonifica amianto: incapsulamento preventivo, rimozione, confezionamento, trasporto e smaltimento (ditta iscritta Albo gestori ambientali cat. 10)', d.asbM2, 'm²', P.asb_rem, { ref: 'D.Lgs. 81/08 Tit. IX capo III · DM 06/09/1994' });
+      add(C.CIV, 'asb_plan', 'Piano di lavoro amianto all\'ASL, ispezione finale e certificazione di avvenuto smaltimento', 1, 'a corpo', P.asb_plan, { ref: 'D.Lgs. 81/08 art. 256' });
+      if (S.asb_mon !== false) add(C.CIV, 'asb_mon', 'Monitoraggio fibre aerodisperse durante la rimozione (campionamento e analisi MOCF)', d.asbDays, 'cad', P.asb_mon, { ref: 'DM 06/09/1994 · art. 254' });
+      chk('info', 'Amianto: piano di lavoro all\'ASL almeno 30 giorni prima', `Bonifica di ${fx(d.asbM2, 0)} m² (${d.asbDays} giorni stimati). L'inizio del cantiere slitta di 30 giorni dalla presentazione, salvo urgenza. La ditta di bonifica è un'impresa esecutrice in più.`, 'D.Lgs. 81/08 art. 256 c.5');
+    }
+    if (d.redoM2 > 0) {
+      if (d.redo === 'grecata') add(C.CIV, 'redo_grec', 'Nuova copertura in lamiera grecata zincopreverniciata (fornitura e posa)', d.redoM2, 'm²', P.redo_grec);
+      else add(C.CIV, 'sandwich', 'Nuova copertura in pannello sandwich coibentato (fornitura e posa)', d.redoM2, 'm²', P.sandwich);
+      add(C.CIV, 'flashing', 'Lattonerie di colmo, gronda e scossaline', Math.round(d.perimeter * Math.min(1, Math.sqrt(d.redoM2 / Math.max(S.roof_area, 1)))), 'm', P.flashing);
+    }
+    if (S.roof_type === 'amianto' && d.redo === 'nessuno') chk('err', 'Moduli su fibrocemento senza rifacimento', 'Dopo la bonifica serve una nuova copertura su cui fissare l\'impianto: scegliere il rifacimento.', 'DM 06/09/1994');
+    d.fragFull = RTy.frag === 'tot' && !(S.roof_type === 'amianto' && d.redoM2 > 0);
+    d.pitched = !!RTy.pitched;
   }
   if (mode === 'carport') {
     d.plinthM3 = S.plinth_m3 > 0 ? S.plinth_m3 : (S.layout === 'doppia' ? 2.4 : 3.0) * Math.pow(d.qs / 1.2, 0.7) * (S.span / 5);
@@ -1069,7 +1086,7 @@ function compute(S, mode, opts) {
   const crewH = S.team * S.h_day;
   d.days = Math.max(1, Math.ceil(d.hTot / crewH)) + (mode === 'carport' ? Math.ceil(d.hSteel / (S.team * S.h_day)) : 0);
   d.daysCivil = mode === 'carport' ? Math.ceil(d.ncol / 6) + 2 : 0;
-  d.daysTot = d.days + d.daysCivil + (mode === 'roof' && S.roof_type === 'amianto' ? Math.ceil((S.asb_m2 > 0 ? S.asb_m2 : S.roof_area) / 250) : 0);
+  d.daysTot = d.days + d.daysCivil + (mode === 'roof' ? (d.asbDays || 0) + (d.redoM2 > 0 ? Math.ceil(d.redoM2 / 400) : 0) : 0);
   d.months = Math.max(1, Math.ceil(d.daysTot / 21));
 
   const tagH = (k) => d.mdoManual && S['h_' + k] > 0 ? ' · ore inserite a mano' : '';
@@ -1112,9 +1129,50 @@ function compute(S, mode, opts) {
 
   /* ---- Sicurezza ---- */
   if (mode === 'roof') {
+    const RTy = ROOF_TYPES[S.roof_type] || ROOF_TYPES.grecata;
     const parapM = Math.round(d.perimeter * S.edge_pct / 100);
-    add(C.SIC, 'parap_ms', 'Parapetti provvisori di bordo EN 13374: montaggio, smontaggio e 1° mese', parapM, 'm', P.parap_ms, { ref: 'All. XV 4.1.1 lett. d · art. 125–126 · UNI EN 13374' });
-    add(C.SIC, 'parap_nolo', 'Nolo parapetti provvisori, mesi successivi al primo', parapM * (d.months - 1), 'm·mese', P.parap_nolo, { ref: 'All. XV 4.1.1 lett. d' });
+    if (d.pitched) {
+      add(C.SIC, 'parapC_ms', 'Parapetti provvisori classe C per coperture inclinate (EN 13374): montaggio, smontaggio e 1° mese', parapM, 'm', P.parapC_ms, { ref: 'All. XV 4.1.1 lett. d · art. 125–126 · UNI EN 13374' });
+      add(C.SIC, 'parapC_nolo', 'Nolo parapetti classe C, mesi successivi al primo', parapM * (d.months - 1), 'm·mese', P.parapC_nolo, { ref: 'All. XV 4.1.1 lett. d' });
+    } else {
+      add(C.SIC, 'parap_ms', 'Parapetti provvisori di bordo EN 13374: montaggio, smontaggio e 1° mese', parapM, 'm', P.parap_ms, { ref: 'All. XV 4.1.1 lett. d · art. 125–126 · UNI EN 13374' });
+      add(C.SIC, 'parap_nolo', 'Nolo parapetti provvisori, mesi successivi al primo', parapM * (d.months - 1), 'm·mese', P.parap_nolo, { ref: 'All. XV 4.1.1 lett. d' });
+    }
+    // superfici non portanti (art. 148): zona di lavoro = campo FV + corridoi
+    d.workArea = Math.round(d.Nmod * M.L * M.W * 1.25);
+    const zone = Math.min(S.roof_area, Math.round(d.workArea * 1.5));
+    d.skylightAuto = Math.round((RTy.sky || 0) * zone);
+    d.skylight = (typeof S.skylight_m2 === 'number') ? S.skylight_m2 : d.skylightAuto;
+    d.fallProtAuto = d.fragFull ? (S.roof_type === 'amianto' ? 'reti' : 'camminamenti') : 'nessuna';
+    d.fallProt = (S.fall_prot && S.fall_prot !== 'auto') ? S.fall_prot : d.fallProtAuto;
+    // reti sottocopertura: sempre dove la copertura viene rimossa o rifatta; sulla zona di lavoro se la protezione scelta sono le reti
+    d.netsAuto = Math.round(Math.max(d.asbM2 || 0, d.redoM2 || 0, d.fallProt === 'reti' ? d.workArea : 0));
+    d.nets = (typeof S.nets_m2 === 'number') ? S.nets_m2 : d.netsAuto;
+    d.walkAuto = d.fallProt === 'camminamenti' ? Math.round(d.workArea * 0.15) : 0;
+    d.walk = (typeof S.walk_m2 === 'number') ? S.walk_m2 : d.walkAuto;
+    if (d.nets > 0) {
+      add(C.SIC, 'nets_ms', 'Reti di sicurezza anticaduta sottocopertura UNI EN 1263-1 sistema S (rete + montaggio e smontaggio con cestello, per la durata dei lavori)', d.nets, 'm²', P.nets_ms, { ref: 'All. XV 4.1.1 lett. d · art. 148 · Piemonte 28.A10.B10 + B05' });
+      if (P.nets_nolo > 0) add(C.SIC, 'nets_nolo', 'Nolo reti di sicurezza, mesi successivi al primo', d.nets * (d.months - 1), 'm²·mese', P.nets_nolo, { ref: 'All. XV 4.1.1 lett. d' });
+      chk('info', `Reti sottocopertura su ${fx(d.nets, 0)} m²: interferenza con le attività sottostanti`, 'Le reti si montano dall\'interno con PLE: coordinare con il committente le aree di produzione o magazzino da liberare (DUVRI/PSC) e verificare gli ancoraggi alle travi.', 'All. XV 4.1.1 lett. b · art. 26');
+    }
+    if (d.walk > 0) {
+      add(C.SIC, 'walk_ms', 'Camminamenti in tavole ripartitrici su manto non portante: montaggio, smontaggio e 1° mese', d.walk, 'm²', P.walk_ms, { ref: 'All. XV 4.1.1 lett. d · art. 148' });
+      add(C.SIC, 'walk_nolo', 'Nolo camminamenti, mesi successivi al primo', d.walk * (d.months - 1), 'm²·mese', P.walk_nolo, { ref: 'All. XV 4.1.1 lett. d' });
+    }
+    // DPI anticaduta: dove la protezione collettiva non copre tutto (bordi parziali, falde inclinate, manto fragile)
+    d.fallKitAuto = S.edge_pct < 100 || d.pitched || d.fragFull || d.walk > 0;
+    d.fallKit = S.fall_kit === 'si' ? true : S.fall_kit === 'no' ? false : d.fallKitAuto;
+    if (d.fallKit) add(C.SIC, 'fall_kit', 'Sistemi anticaduta provvisori per squadra di 4: 2 linee vita temporanee EN 795 e 4 kit professionali (imbracatura, doppio cordino, casco), più recupero', Math.max(1, Math.ceil(S.team / 4)), 'squadra', P.fall_kit, { ref: 'All. XV 4.1.1 lett. d · art. 111, 115–116 · Piemonte 28.A10.A10 + D45' });
+    // verifiche art. 148 e caduta dall'alto
+    if (d.fragFull && d.fallProt === 'nessuna' && !(d.nets > 0)) chk('err', 'Copertura non portante senza protezione dallo sfondamento', 'Su fibrocemento o coppi non si cammina sul manto: prevedere reti sottocopertura o camminamenti ripartitori.', 'D.Lgs. 81/08 art. 148');
+    else if (d.fragFull) chk('info', 'Copertura non portante: protezione dallo sfondamento compresa', d.fallProt === 'reti' || d.nets > 0 ? `Reti sottocopertura su ${fx(d.nets, 0)} m².` : `Camminamenti su ${fx(d.walk, 0)} m² e sistemi anticaduta individuali.`, 'D.Lgs. 81/08 art. 148');
+    else if (RTy.frag === 'parz') chk('info', 'Lucernari e parti non portanti', `Protetti ${fx(d.skylight, 0)} m² di lucernari nella zona di lavoro (${S.roof_type === 'tegolo' ? 'coppelle e shed' : 'lucernari a nastro o puntuali'}). Prima del calpestio va verificata la portata del manto; lamiere sottili e sandwich datati vanno trattati come non portanti.`, 'D.Lgs. 81/08 art. 148');
+    if (S.edge_pct < 100) chk('info', `Parapetti sul ${fx(S.edge_pct, 0)}% del perimetro`, 'Le zone senza parapetto vanno delimitate a distanza dal bordo e percorse solo con DPI anticaduta collegati a linea vita: inclusi i sistemi anticaduta provvisori.', 'D.Lgs. 81/08 art. 111, 115');
+    if (M.pallet > 0 && M.kg > 0) {
+      const pl = M.pallet * M.kg * 1.05 / (M.L * 1.15 * M.W * 1.1);
+      if (S.roof_capacity > 0 && pl > S.roof_capacity) chk('info', `Pallet in copertura: circa ${fx(pl, 0)} kg/m² contro ${fx(S.roof_capacity, 0)} kg/m² ammessi`, 'Non depositare i pallet interi sul manto: scaricare in corrispondenza delle travi principali su ripartitori e distribuire subito i moduli, oppure sollevare pochi moduli per volta. Da concordare con lo strutturista.', 'NTC 2018 §8 · D.Lgs. 81/08 art. 148');
+    }
+    if (!(S.lifeline_m > 0)) chk('info', 'Accesso permanente per la manutenzione', 'Senza linea vita permanente la manutenzione dell\'impianto richiederà ogni volta protezioni provvisorie. Verificare la legge regionale sull\'accesso alle coperture (elaborato tecnico) e lo stato dei dispositivi esistenti.', 'UNI EN 795 · UNI 11578');
     if (S.scaf_m > 0) {
       const m2 = Math.round(S.scaf_m * (S.eave_h + 1.2));
       add(C.SIC, 'scaf_ms', 'Ponteggio di facciata: montaggio, smontaggio e 1° mese, con PiMUS', m2, 'm²', P.scaf_ms, { ref: 'All. XV 4.1.1 lett. a · art. 131–136' });
@@ -1122,20 +1180,24 @@ function compute(S, mode, opts) {
     }
     add(C.SIC, 'tower_ms', 'Torre scala di accesso alla copertura (montaggio e smontaggio)', d.towers, 'pz', P.tower_ms, { ref: 'All. XV 4.1.1 lett. a · art. 113' });
     add(C.SIC, 'tower_nolo', 'Nolo torre scala', d.towers * d.months, 'pz·mese', P.tower_nolo, { ref: 'All. XV 4.1.1 lett. a' });
-    add(C.SIC, 'skylight', 'Protezione lucernari (reti/grigliati anticaduta)', d.skylight, 'm²', P.skylight, { ref: 'All. XV 4.1.1 lett. d · art. 148' });
+    add(C.SIC, 'skylight', 'Protezione lucernari e aperture con tavolato o grigliato: montaggio, smontaggio e 1° mese', d.skylight, 'm²', P.skylight, { ref: 'All. XV 4.1.1 lett. d · art. 148 · Piemonte 28.A05.B32.005' });
+    add(C.SIC, 'skylight_nolo', 'Protezione lucernari, mesi successivi al primo', d.skylight * (d.months - 1), 'm²·mese', P.skylight_nolo, { ref: 'Piemonte 28.A05.B32.010' });
     if (S.lifeline_m > 0) {
       add(C.CIV, 'lifeline', 'Linea vita permanente su copertura (EN 795 tipo C) con certificazione', S.lifeline_m, 'm', P.lifeline, { mat: true, ref: 'UNI EN 795 · UNI 11578' });
       add(C.CIV, 'lifeline_doc', 'Elaborato tecnico della copertura', 1, 'a corpo', P.lifeline_doc);
     }
     d.storageAuto = Math.round(50 + 0.08 * d.Nmod);
     d.storageM2 = S.storage_m2 > 0 ? S.storage_m2 : d.storageAuto;
-    add(C.SIC, 'fence', `Delimitazione area di stoccaggio e sollevamento ${Math.round(d.storageM2)} m² (perimetro; montaggio, smontaggio, 1° mese)`, Math.round(4 * Math.sqrt(d.storageM2)), 'm', P.fence, { ref: 'All. XV 4.1.1 lett. a' });
+    const fr = Math.round(4 * Math.sqrt(d.storageM2));
+    add(C.SIC, 'fence', `Recinzione mobile area di stoccaggio e sollevamento ${Math.round(d.storageM2)} m² (pannelli su basi; montaggio, smontaggio, 1° mese)`, fr, 'm', P.fence, { ref: 'All. XV 4.1.1 lett. a · Piemonte 28.A05.E10.005' });
+    add(C.SIC, 'fence_nolo', 'Nolo recinzione, mesi successivi al primo', fr * (d.months - 1), 'm·mese', P.fence_nolo, { ref: 'Piemonte 28.A05.E10.010' });
   } else {
     const fm = S.fence_m > 0 ? S.fence_m : Math.round(2 * (d.Lrow + S.cov_depth * d.wings) + 10);
-    add(C.SIC, 'fence', 'Recinzione mobile di cantiere in area parcheggio (montaggio, smontaggio, 1° mese)', fm, 'm', P.fence, { ref: 'All. XV 4.1.1 lett. a' });
+    add(C.SIC, 'fence', 'Recinzione mobile di cantiere in area parcheggio (pannelli su basi; montaggio, smontaggio, 1° mese)', fm, 'm', P.fence, { ref: 'All. XV 4.1.1 lett. a · Piemonte 28.A05.E10.005' });
     add(C.SIC, 'fence_nolo', 'Nolo recinzione, mesi successivi al primo', fm * (d.months - 1), 'm·mese', P.fence_nolo, { ref: 'All. XV 4.1.1 lett. a' });
   }
-  if (!SITE) add(C.SIC, 'site_hut', 'Box spogliatoio e WC chimico (nolo mensile)', d.months, 'mese', P.site_hut, { ref: 'D.Lgs. 81/08 All. XIII' });
+  if (!SITE) add(C.SIC, 'site_hut', 'Box spogliatoio con servizio igienico: trasporto, posa e nolo 1° mese', 1, 'cad', P.site_hut, { ref: 'All. XV 4.1.1 lett. a · All. XIII · Piemonte 28.A05.D10.005' });
+  if (!SITE) add(C.SIC, 'site_hut_n', 'Box spogliatoio con servizio igienico, mesi successivi', d.months - 1, 'mese', P.site_hut_n, { ref: 'Piemonte 28.A05.D10.010' });
   if (!SITE) add(C.SIC, 'dpi', 'Segnaletica e cartellonistica di cantiere, estintori, DPI per rischi interferenziali', 1, 'a corpo', P.dpi, { ref: 'All. XV 4.1.1 lett. b, d' });
   if (!SITE && S.multi_imp !== false) add(C.SIC, 'meet', 'Riunioni di coordinamento tra imprese e procedure del PSC (1 ogni 2 settimane, min. 2)', Math.max(2, Math.ceil(d.daysTot / 10)), 'cad', P.meet, { ref: 'All. XV 4.1.1 lett. e, g' });
 
@@ -1255,7 +1317,7 @@ const CAT_ORDER_ALL = ['Moduli e ottimizzatori', 'Strutture di supporto', 'Inver
   'Quadri, protezioni e connessione', 'Monitoraggio', 'Opere edili in copertura', 'Opere civili e fondazioni',
   'Costi della sicurezza (All. XV D.Lgs. 81/08)', 'Coordinamento sicurezza CSP/CSE', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
 const DM_STR_IDS = new Set(['steel', 'clamps_cp', 'st_budget', 'sheet_cp', 'gutter_cp', 'plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'mdo_steel']);
-const DM_EDI_IDS = new Set(['asb_rem', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
+const DM_EDI_IDS = new Set(['asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
 // classe DM di una voce del computo (per l'importo V dei compensi): imp, str, edi o '' se esclusa
 function dmClass(it, mode, isSite) {
   if (it.cat === SITE_CAT.PRO || it.cat === SITE_CAT.CSP) return '';
@@ -1371,10 +1433,12 @@ function computeSite(site) {
   add(K.MDO, 'travel_km', `Trasferimenti mezzi (${vehicles} mezzi × ${sd.daysTot} gg × ${C0.km * 2} km A/R)`, Math.round(vehicles * sd.daysTot * C0.km * 2), 'km', C0.eur_km);
   if (C0.trasf_pp > 0) add(K.MDO, 'travel_pp', 'Trasferta squadra (vitto e alloggio)', C0.team * sd.daysWork, 'gg·pers', C0.trasf_pp);
   // sicurezza di cantiere
-  add(K.SIC, 'site_hut', 'Box spogliatoio e WC chimico, con pulizia periodica (nolo mensile)', sd.months, 'mese', P.site_hut, { ref: 'All. XV 4.1.1 lett. a · All. XIII' });
+  add(K.SIC, 'site_hut', 'Box spogliatoio con servizio igienico: trasporto, posa e nolo 1° mese', 1, 'cad', P.site_hut, { ref: 'All. XV 4.1.1 lett. a · All. XIII · Piemonte 28.A05.D10.005' });
+  add(K.SIC, 'site_hut_n', 'Box spogliatoio con servizio igienico, mesi successivi', sd.months - 1, 'mese', P.site_hut_n, { ref: 'Piemonte 28.A05.D10.010' });
   add(K.SIC, 'dpi', 'Segnaletica e cartellonistica di cantiere, estintori, DPI per rischi interferenziali', 1, 'a corpo', P.dpi + (res.length > 1 ? 150 * (res.length - 1) : 0), { ref: 'All. XV 4.1.1 lett. b, d' });
-  if (C0.multi_imp !== false) add(K.SIC, 'meet', 'Riunioni di coordinamento tra imprese e procedure del PSC (1 ogni 2 settimane, min. 2)', Math.max(2, Math.ceil(sd.daysTot / 10)), 'cad', P.meet, { ref: 'All. XV 4.1.1 lett. e, g' });
+  if (C0.multi_imp !== false) add(K.SIC, 'meet', 'Riunioni di coordinamento tra imprese e procedure del PSC (1 ogni 2 settimane, min. 2)', Math.max(2, Math.ceil(sd.daysTot / 10)), 'cad', P.meet, { ref: 'All. XV 4.1.1 lett. e, g · Piemonte 28.A35.A05.005' });
   // obblighi di coordinamento e notifica (art. 90 c.3 e art. 99)
+  if (C0.multi_imp === false && res.some(r => r.d.asbM2 > 0)) chk('warn', 'Bonifica amianto con "impresa unica"', 'La rimozione la esegue una ditta iscritta all\'Albo gestori ambientali (cat. 10): di solito è un\'impresa in più. Attivare "più imprese in cantiere".', 'D.Lgs. 81/08 art. 90 c.3, art. 256');
   sd.ug = Math.ceil((sd.hAll || 0) / 8);
   if (C0.multi_imp !== false) {
     chk('info', 'Più imprese in cantiere: CSP, CSE e PSC obbligatori', `Anche se non contemporanee (subappalti, nolo a caldo di gru o PLE con operatore). Notifica preliminare all'ASL e all'Ispettorato del lavoro prima dell'inizio lavori. Stima ${sd.ug} uomini-giorno.`, 'D.Lgs. 81/08 art. 90 c.3, art. 99 c.1 lett. a');
@@ -1560,7 +1624,8 @@ function sectionStateDefault(mode) {
   };
   if (mode === 'roof') return Object.assign(base, {
     roof_type: 'grecata', roof_area: 2600, fill: 0, kwp_target: 300,
-    roof_capacity: 25, ballast_kg: null, asb_m2: 0,
+    roof_capacity: 25, ballast_kg: null, asb_on: false, asb_m2: 0, asb_redo: 'sandwich', redo_m2: 0, asb_mon: true,
+    fall_prot: 'auto', nets_m2: null, walk_m2: null, fall_kit: 'auto',
     eave_h: 8, perimeter: 0, edge_pct: 100, skylight_m2: null, lifeline_m: 0,
     lift: 'gru', lift_days: 0, ple: true, ple_days: 0, storage_m2: 0, scaf_m: 0, towers: 0, equip: true, prog_str: true
   });
@@ -1669,12 +1734,21 @@ function secGroups(mode) {
       { k: 'kwp_target', l: 'Potenza obiettivo', u: 'kWp', h: '0 = riempi tutta la superficie utile.' },
       { k: 'roof_capacity', l: 'Portata residua copertura', u: 'kg/m²', h: 'Sovraccarico permanente ammissibile dichiarato dallo strutturista.' },
       { k: 'ballast_kg', l: 'Zavorra per modulo', u: 'kg', blankNull: true, auto: (r) => nf(r.d.ballastKg, 0), show: (s) => s.roof_type.startsWith('piana'), h: 'Da calcolo al vento (NTC 2018 §3.3). Vuoto = valore tipico.' },
-      { k: 'asb_m2', l: 'Superficie da bonificare', u: 'm²', auto: (r, s) => nf(s.roof_area, 0), show: (s) => s.roof_type === 'amianto' },
       { k: 'eave_h', l: 'Altezza di gronda', u: 'm', step: 0.1 },
       { k: 'perimeter', l: 'Perimetro copertura', u: 'm', auto: (r) => nf(r.d.perimeter, 0), h: 'Vuoto = stimato da pianta rettangolare 2:1.' },
       { k: 'prog_str', l: 'Verifica strutturale della copertura', t: 'chk' }
     ]
-  } : {
+  } : null);
+  if (R) g.push({
+    id: 'asb', title: 'Bonifica amianto e rifacimento copertura', sub: 'D.Lgs. 81/08 Titolo IX · DM 06/09/1994', fields: [
+      { k: 'asb_on', l: 'Bonifica amianto in questa copertura', t: 'chk', wide: true, show: (s) => s.roof_type !== 'amianto', h: 'Anche parziale. Con tipologia "Fibrocemento" è sempre attiva.' },
+      { k: 'asb_m2', l: 'Superficie da bonificare', u: 'm²', auto: (r, s) => s.roof_type === 'amianto' ? nf(s.roof_area, 0) : '', show: (s) => s.asb_on || s.roof_type === 'amianto' },
+      { k: 'asb_redo', l: 'Rifacimento', t: 'sel', o: [['sandwich', 'Pannello sandwich coibentato'], ['grecata', 'Lamiera grecata'], ['nessuno', 'Nessuno (sola rimozione)']], show: (s) => s.asb_on || s.roof_type === 'amianto' },
+      { k: 'redo_m2', l: 'Superficie da rifare', u: 'm²', auto: (r) => r.d.asbM2 ? nf(r.d.asbM2, 0) : '', show: (s) => (s.asb_on || s.roof_type === 'amianto') && s.asb_redo !== 'nessuno', h: 'Vuoto = uguale alla superficie bonificata.' },
+      { k: 'asb_mon', l: 'Monitoraggio fibre aerodisperse (1 campionamento per giorno di rimozione)', t: 'chk', wide: true, show: (s) => s.asb_on || s.roof_type === 'amianto' }
+    ]
+  });
+  g.push(!R ? {
     id: 'site', title: 'Pensilina', sub: 'Geometria (neve e quota nei Dati comuni)', open: true, fields: [
       { k: 'stalls', l: 'Numero posti auto', u: 'stalli', auto: (r) => r.d.stalls, h: '0 = calcolati dalla potenza obiettivo.' },
       { k: 'layout', l: 'Schema strutturale', t: 'sel', o: [['mono', 'Monofalda a sbalzo · fila singola'], ['doppia', 'Doppia falda a T · due file']], wide: true },
@@ -1692,7 +1766,7 @@ function secGroups(mode) {
       { k: 'trench_m', l: 'Cavidotto interrato fino al quadro', u: 'm' },
       { k: 'fence_m', l: 'Recinzione di cantiere', u: 'm', auto: (r, s) => nf(2 * (r.d.Lrow + s.cov_depth * r.d.wings) + 10, 0) }
     ]
-  });
+  } : null);
   g.push({
     id: 'mod', title: 'Modulo fotovoltaico', sub: 'Dati da datasheet del fornitore', fields: [
       { k: 'mod_preset', l: 'Modello', t: 'sel', o: [...opts(E.MOD_PRESETS), ['custom', 'Personalizzato']], wide: true, src: true },
@@ -1797,7 +1871,11 @@ function secGroups(mode) {
   if (R) g.push({
     id: 'sic', title: 'Sicurezza e noli in copertura', sub: 'D.Lgs. 81/08 Titolo IV', fields: [
       { k: 'edge_pct', l: 'Bordi da proteggere', u: '%', h: 'Quota del perimetro senza parapetto fisso. Su impianti piccoli in tetti grandi proteggi solo la zona di lavoro.' },
-      { k: 'skylight_m2', l: 'Lucernari da proteggere', u: 'm²', blankNull: true, auto: (r) => nf(r.d.skylight, 0), h: 'Vuoto = 5% della copertura; 0 = nessuno.' },
+      { k: 'skylight_m2', l: 'Lucernari da proteggere', u: 'm²', blankNull: true, auto: (r) => nf(r.d.skylightAuto, 0), h: 'Vuoto = quota tipica della tipologia sulla zona di lavoro (campo FV + corridoi); 0 = nessuno.' },
+      { k: 'fall_prot', l: 'Protezione dallo sfondamento del manto', t: 'sel', wide: true, o: [['auto', 'Automatica dalla tipologia di copertura'], ['reti', 'Reti di sicurezza sottocopertura'], ['camminamenti', 'Camminamenti ripartitori sul manto'], ['nessuna', 'Nessuna (manto portante)']], h: 'Art. 148: su coperture non portanti servono reti sotto o tavolati sopra. Automatica: reti per fibrocemento, camminamenti per coppi e tegole.' },
+      { k: 'nets_m2', l: 'Reti anticaduta sottocopertura', u: 'm²', blankNull: true, auto: (r) => nf(r.d.netsAuto, 0), h: 'Vuoto = superficie bonificata o rifatta, più la zona di lavoro se la protezione sono le reti. Inserisci i m² anche per altre opere edili in copertura; 0 = nessuna.' },
+      { k: 'walk_m2', l: 'Camminamenti ripartitori', u: 'm²', blankNull: true, auto: (r) => nf(r.d.walkAuto, 0), h: 'Vuoto = 15% della zona di lavoro con protezione a camminamenti.' },
+      { k: 'fall_kit', l: 'Sistemi anticaduta provvisori (linea vita temporanea e kit di recupero)', t: 'sel', wide: true, o: [['auto', 'Automatici: bordi non protetti, falde inclinate, manto non portante'], ['si', 'Sempre'], ['no', 'No']] },
       { k: 'lifeline_m', l: 'Linea vita permanente', u: 'm', h: '0 = esistente o non richiesta.' },
       { k: 'scaf_m', l: 'Ponteggio di facciata', u: 'm', h: 'Lunghezza di facciata; 0 = solo parapetti.' },
       { k: 'towers', l: 'Torri scala di accesso', u: 'pz', auto: (r) => r.d.towers, h: '0 = una ogni 3.000 m².' },
@@ -1808,7 +1886,7 @@ function secGroups(mode) {
       { k: 'ple_days', l: 'Giorni di PLE', u: 'gg', auto: (r) => r.d.pleDaysAuto, show: (s) => s.ple, h: 'Vuoto = per tutta la durata della posa.' }
     ]
   });
-  return g;
+  return g.filter(Boolean);
 }
 const COMMON_GROUPS = [
   { id: 'clima', title: 'Località e clima', sub: 'Valgono per tutte le sezioni', open: true, fields: [
