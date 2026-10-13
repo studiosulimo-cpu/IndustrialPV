@@ -587,7 +587,7 @@ const PRICES = {
   // monitoraggio
   logger: 1100, meter: 450, router: 250,
   // opere edili / civili
-  asb_rem: 16, sandwich: 42, redo_grec: 26, flashing: 25, asb_plan: 900, asb_mon: 280,
+  asb_rem: 16, sandwich: 42, redo_grec: 26, flashing: 25, asb_plan: 900, asb_mon: 280, demo_sheet: 7, demo_sw: 11, sandwich_40: 38, sandwich_60: 42, sandwich_80: 47, sandwich_100: 52,
   plinth_m3: 260, anchor_kit: 120, asphalt: 30, soil: 25, micropile_m: 90,
   geo: 2500, trench: 55, pit: 220, led: 190, ev: 1700, bumper: 95, marking: 25,
   // sicurezza
@@ -1007,23 +1007,41 @@ function compute(S, mode, opts) {
   if (mode === 'roof') {
     // bonifica amianto e rifacimento: indipendenti dalla tipologia (amianto = attiva di default su tutta la copertura)
     const RTy = ROOF_TYPES[S.roof_type] || ROOF_TYPES.grecata;
-    d.asbOn = !!S.asb_on || S.roof_type === 'amianto';
-    d.asbM2 = d.asbOn ? (S.asb_m2 > 0 ? S.asb_m2 : (S.roof_type === 'amianto' ? S.roof_area : 0)) : 0;
-    d.redo = d.asbOn ? (S.asb_redo || 'sandwich') : 'nessuno';
-    d.redoM2 = d.redo === 'nessuno' ? 0 : (S.redo_m2 > 0 ? S.redo_m2 : d.asbM2);
-    d.asbDays = d.asbM2 > 0 ? Math.ceil(d.asbM2 / 250) : 0;
-    if (d.asbOn && !(d.asbM2 > 0)) chk('warn', 'Bonifica amianto senza superficie', 'Inserire i m² da bonificare.', 'D.Lgs. 81/08 Tit. IX');
-    if (d.asbM2 > 0) {
-      add(C.CIV, 'asb_rem', 'Bonifica amianto: incapsulamento preventivo, rimozione, confezionamento, trasporto e smaltimento (ditta iscritta Albo gestori ambientali cat. 10)', d.asbM2, 'm²', P.asb_rem, { ref: 'D.Lgs. 81/08 Tit. IX capo III · DM 06/09/1994' });
-      add(C.CIV, 'asb_plan', 'Piano di lavoro amianto all\'ASL, ispezione finale e certificazione di avvenuto smaltimento', 1, 'a corpo', P.asb_plan, { ref: 'D.Lgs. 81/08 art. 256' });
+    // intervento sulla copertura esistente: bonifica amianto o sostituzione di lamiera/sandwich, con rifacimento
+    d.work = S.roof_type === 'amianto' ? 'amianto' : (S.roof_work || 'nessuno');
+    d.asbOn = d.work === 'amianto';
+    const remM2 = d.work === 'nessuno' ? 0 : (S.asb_m2 > 0 ? S.asb_m2 : (S.roof_type === 'amianto' ? S.roof_area : 0));
+    d.remM2 = remM2; d.asbM2 = d.asbOn ? remM2 : 0;
+    d.redo = d.work === 'nessuno' ? 'nessuno' : (S.asb_redo || 'sandwich');
+    d.redoM2 = d.redo === 'nessuno' ? 0 : (S.redo_m2 > 0 ? S.redo_m2 : remM2);
+    const remRate = { amianto: 250, lamiera: 400, sandwich_old: 300 }[d.work] || 400;
+    d.asbDays = remM2 > 0 ? Math.ceil(remM2 / remRate) : 0;     // giorni di rimozione (anche non amianto)
+    const WL = { amianto: 'Bonifica amianto', lamiera: 'Sostituzione lamiera esistente', sandwich_old: 'Sostituzione sandwich esistente' }[d.work];
+    if (d.work !== 'nessuno' && !(remM2 > 0)) chk('warn', `${WL} senza superficie`, 'Inserire i m² da rimuovere.', '');
+    if (d.work !== 'nessuno' && d.work !== 'amianto' && d.redo === 'nessuno') chk('err', 'Sostituzione senza nuova copertura', 'Togliendo la copertura esistente serve un rifacimento: scegliere sandwich o lamiera.', '');
+    const swTh = +S.sw_th || 60;
+    const swPrice = P['sandwich_' + swTh] || P.sandwich;
+    const flashM = Math.round(d.perimeter * Math.min(1, Math.sqrt((d.redoM2 || remM2) / Math.max(S.roof_area, 1))));
+    if (remM2 > 0 && S.redo_mode === 'corpo') {
+d.redoParam = (d.asbOn ? P.asb_rem + P.asb_plan / remM2 : (d.work === 'lamiera' ? P.demo_sheet : P.demo_sw) * 1) * remM2 + (d.redoM2 > 0 ? (d.redo === 'grecata' ? P.redo_grec : swPrice) * d.redoM2 + P.flashing * flashM : 0);
+      add(C.CIV, 'redo_corpo', `${WL} e rifacimento copertura · a corpo (${fx(remM2, 0)} m² rimossi${d.redoM2 > 0 ? `, ${fx(d.redoM2, 0)} m² nuovi` : ''}${S.redo_corpo > 0 ? '' : ' · importo stimato a voci'})`, 1, 'a corpo', S.redo_corpo > 0 ? S.redo_corpo : Math.round(d.redoParam), { ref: d.asbOn ? 'D.Lgs. 81/08 Tit. IX · DM 06/09/1994' : 'D.Lgs. 152/2006 parte IV' });
+    } else if (remM2 > 0) {
+      if (d.asbOn) {
+        add(C.CIV, 'asb_rem', 'Bonifica amianto: incapsulamento preventivo, rimozione, confezionamento, trasporto e smaltimento (ditta iscritta Albo gestori ambientali cat. 10)', remM2, 'm²', P.asb_rem, { ref: 'D.Lgs. 81/08 Tit. IX capo III · DM 06/09/1994' });
+        add(C.CIV, 'asb_plan', 'Piano di lavoro amianto all\'ASL, ispezione finale e certificazione di avvenuto smaltimento', 1, 'a corpo', P.asb_plan, { ref: 'D.Lgs. 81/08 art. 256' });
+      } else if (d.work === 'lamiera') add(C.CIV, 'demo_sheet', 'Smontaggio copertura in lamiera grecata, calo a terra, cernita, trasporto e conferimento come rottame metallico (CER 17 04 05)', remM2, 'm²', P.demo_sheet, { ref: 'D.Lgs. 152/2006 parte IV' });
+      else add(C.CIV, 'demo_sw', 'Smontaggio pannelli sandwich esistenti, calo a terra, trasporto e conferimento a impianto autorizzato (CER 17 06 04 / 17 09 04)', remM2, 'm²', P.demo_sw, { ref: 'D.Lgs. 152/2006 parte IV' });
+      if (d.redoM2 > 0) {
+        if (d.redo === 'grecata') add(C.CIV, 'redo_grec', 'Nuova copertura in lamiera grecata zincopreverniciata (fornitura e posa)', d.redoM2, 'm²', P.redo_grec);
+        else add(C.CIV, 'sandwich', `Nuova copertura in pannello sandwich coibentato sp. ${swTh} mm (fornitura e posa, fissaggi e guarnizioni)`, d.redoM2, 'm²', swPrice);
+        add(C.CIV, 'flashing', 'Lattonerie di colmo, gronda e scossaline', flashM, 'm', P.flashing);
+      }
+    }
+    if (d.asbOn && remM2 > 0) {
       if (S.asb_mon !== false) add(C.CIV, 'asb_mon', 'Monitoraggio fibre aerodisperse durante la rimozione (campionamento e analisi MOCF)', d.asbDays, 'cad', P.asb_mon, { ref: 'DM 06/09/1994 · art. 254' });
-      chk('info', 'Amianto: piano di lavoro all\'ASL almeno 30 giorni prima', `Bonifica di ${fx(d.asbM2, 0)} m² (${d.asbDays} giorni stimati). L'inizio del cantiere slitta di 30 giorni dalla presentazione, salvo urgenza. La ditta di bonifica è un'impresa esecutrice in più.`, 'D.Lgs. 81/08 art. 256 c.5');
+      chk('info', 'Amianto: piano di lavoro all\'ASL almeno 30 giorni prima', `Bonifica di ${fx(remM2, 0)} m² (${d.asbDays} giorni stimati). L'inizio del cantiere slitta di 30 giorni dalla presentazione, salvo urgenza. La ditta di bonifica è un'impresa esecutrice in più.`, 'D.Lgs. 81/08 art. 256 c.5');
     }
-    if (d.redoM2 > 0) {
-      if (d.redo === 'grecata') add(C.CIV, 'redo_grec', 'Nuova copertura in lamiera grecata zincopreverniciata (fornitura e posa)', d.redoM2, 'm²', P.redo_grec);
-      else add(C.CIV, 'sandwich', 'Nuova copertura in pannello sandwich coibentato (fornitura e posa)', d.redoM2, 'm²', P.sandwich);
-      add(C.CIV, 'flashing', 'Lattonerie di colmo, gronda e scossaline', Math.round(d.perimeter * Math.min(1, Math.sqrt(d.redoM2 / Math.max(S.roof_area, 1)))), 'm', P.flashing);
-    }
+    if (remM2 > 0 && !d.asbOn) chk('info', `${WL}: copertura aperta durante i lavori`, `${fx(remM2, 0)} m² in ${d.asbDays} giorni di smontaggio. Reti sottocopertura sulla superficie rimossa, protezione dalla pioggia dei locali sottostanti e verifica che la lamiera esistente non contenga vernici o coibenti da caratterizzare.`, 'D.Lgs. 81/08 art. 148');
     if (S.roof_type === 'amianto' && d.redo === 'nessuno') chk('err', 'Moduli su fibrocemento senza rifacimento', 'Dopo la bonifica serve una nuova copertura su cui fissare l\'impianto: scegliere il rifacimento.', 'DM 06/09/1994');
     d.fragFull = RTy.frag === 'tot' && !(S.roof_type === 'amianto' && d.redoM2 > 0);
     d.pitched = !!RTy.pitched;
@@ -1146,7 +1164,7 @@ function compute(S, mode, opts) {
     d.fallProtAuto = d.fragFull ? (S.roof_type === 'amianto' ? 'reti' : 'camminamenti') : 'nessuna';
     d.fallProt = (S.fall_prot && S.fall_prot !== 'auto') ? S.fall_prot : d.fallProtAuto;
     // reti sottocopertura: sempre dove la copertura viene rimossa o rifatta; sulla zona di lavoro se la protezione scelta sono le reti
-    d.netsAuto = Math.round(Math.max(d.asbM2 || 0, d.redoM2 || 0, d.fallProt === 'reti' ? d.workArea : 0));
+    d.netsAuto = Math.round(Math.max(d.remM2 || 0, d.redoM2 || 0, d.fallProt === 'reti' ? d.workArea : 0));
     d.nets = (typeof S.nets_m2 === 'number') ? S.nets_m2 : d.netsAuto;
     d.walkAuto = d.fallProt === 'camminamenti' ? Math.round(d.workArea * 0.15) : 0;
     d.walk = (typeof S.walk_m2 === 'number') ? S.walk_m2 : d.walkAuto;
@@ -1317,7 +1335,7 @@ const CAT_ORDER_ALL = ['Moduli e ottimizzatori', 'Strutture di supporto', 'Inver
   'Quadri, protezioni e connessione', 'Monitoraggio', 'Opere edili in copertura', 'Opere civili e fondazioni',
   'Costi della sicurezza (All. XV D.Lgs. 81/08)', 'Coordinamento sicurezza CSP/CSE', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
 const DM_STR_IDS = new Set(['steel', 'clamps_cp', 'st_budget', 'sheet_cp', 'gutter_cp', 'plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'mdo_steel']);
-const DM_EDI_IDS = new Set(['asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
+const DM_EDI_IDS = new Set(['asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'redo_corpo', 'demo_sheet', 'demo_sw', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
 // classe DM di una voce del computo (per l'importo V dei compensi): imp, str, edi o '' se esclusa
 function dmClass(it, mode, isSite) {
   if (it.cat === SITE_CAT.PRO || it.cat === SITE_CAT.CSP) return '';
@@ -1624,7 +1642,7 @@ function sectionStateDefault(mode) {
   };
   if (mode === 'roof') return Object.assign(base, {
     roof_type: 'grecata', roof_area: 2600, fill: 0, kwp_target: 300,
-    roof_capacity: 25, ballast_kg: null, asb_on: false, asb_m2: 0, asb_redo: 'sandwich', redo_m2: 0, asb_mon: true,
+    roof_capacity: 25, ballast_kg: null, roof_work: 'nessuno', asb_m2: 0, asb_redo: 'sandwich', redo_m2: 0, asb_mon: true, sw_th: 60, redo_mode: 'param', redo_corpo: 0,
     fall_prot: 'auto', nets_m2: null, walk_m2: null, fall_kit: 'auto',
     eave_h: 8, perimeter: 0, edge_pct: 100, skylight_m2: null, lifeline_m: 0,
     lift: 'gru', lift_days: 0, ple: true, ple_days: 0, storage_m2: 0, scaf_m: 0, towers: 0, equip: true, prog_str: true
@@ -1662,6 +1680,7 @@ function normalizeSite(x) {
     const mode = sec.mode === 'carport' ? 'carport' : 'roof';
     const d = sectionStateDefault(mode); const st = sec.state || {};
     const o = Object.assign(d, st);
+    if (mode === 'roof' && !st.roof_work) o.roof_work = st.asb_on ? 'amianto' : 'nessuno';   // migrazione dalla casella "bonifica amianto"
     o.mod = Object.assign({}, d.mod, st.mod || {}); o.inv = Object.assign({}, d.inv, st.inv || {}); o.st = Object.assign({}, d.st, st.st || {}); o.ov = st.ov || {}; o.qov = st.qov || {};
     return { id: sec.id || uid(), mode, name: sec.name || (mode === 'roof' ? 'Tetto' : 'Pensilina'), state: o };
   });
@@ -1739,13 +1758,18 @@ function secGroups(mode) {
       { k: 'prog_str', l: 'Verifica strutturale della copertura', t: 'chk' }
     ]
   } : null);
+  const work = (s) => s.roof_type === 'amianto' ? 'amianto' : (s.roof_work || 'nessuno');
+  const wOn = (s) => work(s) !== 'nessuno';
   if (R) g.push({
-    id: 'asb', title: 'Bonifica amianto e rifacimento copertura', sub: 'D.Lgs. 81/08 Titolo IX · DM 06/09/1994', fields: [
-      { k: 'asb_on', l: 'Bonifica amianto in questa copertura', t: 'chk', wide: true, show: (s) => s.roof_type !== 'amianto', h: 'Anche parziale. Con tipologia "Fibrocemento" è sempre attiva.' },
-      { k: 'asb_m2', l: 'Superficie da bonificare', u: 'm²', auto: (r, s) => s.roof_type === 'amianto' ? nf(s.roof_area, 0) : '', show: (s) => s.asb_on || s.roof_type === 'amianto' },
-      { k: 'asb_redo', l: 'Rifacimento', t: 'sel', o: [['sandwich', 'Pannello sandwich coibentato'], ['grecata', 'Lamiera grecata'], ['nessuno', 'Nessuno (sola rimozione)']], show: (s) => s.asb_on || s.roof_type === 'amianto' },
-      { k: 'redo_m2', l: 'Superficie da rifare', u: 'm²', auto: (r) => r.d.asbM2 ? nf(r.d.asbM2, 0) : '', show: (s) => (s.asb_on || s.roof_type === 'amianto') && s.asb_redo !== 'nessuno', h: 'Vuoto = uguale alla superficie bonificata.' },
-      { k: 'asb_mon', l: 'Monitoraggio fibre aerodisperse (1 campionamento per giorno di rimozione)', t: 'chk', wide: true, show: (s) => s.asb_on || s.roof_type === 'amianto' }
+    id: 'asb', title: 'Intervento sulla copertura esistente', sub: 'Bonifica amianto o sostituzione di lamiera e sandwich, con rifacimento', fields: [
+      { k: 'roof_work', l: 'Intervento', t: 'sel', wide: true, o: [['nessuno', 'Nessuno'], ['amianto', 'Bonifica amianto e rifacimento'], ['lamiera', 'Sostituzione lamiera grecata esistente'], ['sandwich_old', 'Sostituzione pannelli sandwich esistenti']], show: (s) => s.roof_type !== 'amianto', h: 'Anche parziale. Con tipologia "Fibrocemento" la bonifica è sempre attiva.' },
+      { k: 'redo_mode', l: 'Stima', t: 'sel', o: [['param', 'A voci (m² × prezzi)'], ['corpo', 'A corpo (importo unico)']], show: wOn, h: 'A corpo: un solo importo per smontaggio, smaltimento, nuova copertura e lattonerie. Sicurezza, durata e compensi restano calcolati sui m².' },
+      { k: 'redo_corpo', l: 'Importo a corpo', u: '€', step: 100, auto: (r) => r.d.redoParam ? nf(r.d.redoParam, 0) : '', show: (s) => wOn(s) && s.redo_mode === 'corpo', h: 'Vuoto = stima a voci (valore in arancio). Inserisci l\'offerta del lattoniere o della ditta di bonifica.' },
+      { k: 'asb_m2', l: 'Superficie da rimuovere', u: 'm²', auto: (r, s) => s.roof_type === 'amianto' ? nf(s.roof_area, 0) : '', show: wOn },
+      { k: 'asb_redo', l: 'Nuova copertura', t: 'sel', o: [['sandwich', 'Pannello sandwich coibentato'], ['grecata', 'Lamiera grecata'], ['nessuno', 'Nessuna (sola rimozione)']], show: wOn },
+      { k: 'sw_th', l: 'Spessore sandwich', t: 'sel', o: [['40', '40 mm · 38 €/m²'], ['60', '60 mm · 42 €/m²'], ['80', '80 mm · 47 €/m²'], ['100', '100 mm · 52 €/m²']], show: (s) => wOn(s) && s.asb_redo === 'sandwich' && s.redo_mode !== 'corpo', h: 'Prezzi di fornitura e posa (stima di mercato): sostituisci con l\'offerta del lattoniere.' },
+      { k: 'redo_m2', l: 'Superficie da rifare', u: 'm²', auto: (r) => r.d.remM2 ? nf(r.d.remM2, 0) : '', show: (s) => wOn(s) && s.asb_redo !== 'nessuno', h: 'Vuoto = uguale alla superficie rimossa.' },
+      { k: 'asb_mon', l: 'Monitoraggio fibre aerodisperse (1 campionamento per giorno di rimozione)', t: 'chk', wide: true, show: (s) => work(s) === 'amianto' }
     ]
   });
   g.push(!R ? {
