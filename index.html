@@ -587,7 +587,7 @@ const PRICES = {
   // monitoraggio
   logger: 1100, meter: 450, router: 250,
   // opere edili / civili
-  asb_rem: 16, sandwich: 42, redo_grec: 26, flashing: 25, asb_plan: 900, asb_mon: 280, demo_sheet: 7, demo_sw: 11, sandwich_40: 38, sandwich_60: 42, sandwich_80: 47, sandwich_100: 52,
+  asb_rem: 16, sandwich: 42, redo_grec: 26, flashing: 25, asb_plan: 900, asb_mon: 280, demo_sheet: 7, demo_sw: 11, demo_fibro: 9, demo_guaina: 5, guaina_new: 26, sovr_inc: 8, sovr_sub: 6, sky_new: 95, asb_test: 250, sandwich_40: 38, sandwich_60: 42, sandwich_80: 47, sandwich_100: 52,
   plinth_m3: 260, anchor_kit: 120, asphalt: 30, soil: 25, micropile_m: 90,
   geo: 2500, trench: 55, pit: 220, led: 190, ev: 1700, bumper: 95, marking: 25,
   // sicurezza
@@ -1008,42 +1008,76 @@ function compute(S, mode, opts) {
     // bonifica amianto e rifacimento: indipendenti dalla tipologia (amianto = attiva di default su tutta la copertura)
     const RTy = ROOF_TYPES[S.roof_type] || ROOF_TYPES.grecata;
     // intervento sulla copertura esistente: bonifica amianto o sostituzione di lamiera/sandwich, con rifacimento
-    d.work = S.roof_type === 'amianto' ? 'amianto' : (S.roof_work || 'nessuno');
+    // intervento sulla copertura esistente (tabella: rimozione, rifacimento, apertura della copertura, resa giornaliera)
+    const W = {
+      amianto:      { l: 'Bonifica amianto', open: true, redo: true, rate: 250 },
+      sovracop:     { l: 'Sovracopertura di lastre in cemento-amianto', open: true, redo: true, rate: 400, need: true },
+      fibro:        { l: 'Sostituzione lastre in fibrocemento senza amianto', open: true, redo: true, rate: 350, need: true },
+      lamiera:      { l: 'Sostituzione lamiera esistente', open: true, redo: true, rate: 400, need: true },
+      sandwich_old: { l: 'Sostituzione sandwich esistente', open: true, redo: true, rate: 300, need: true },
+      guaina:       { l: 'Rifacimento impermeabilizzazione', open: false, redo: false, rate: 500 }
+    };
+    const rw = S.roof_work || 'nessuno';
+    d.work = S.roof_type === 'amianto' ? (rw === 'sovracop' ? 'sovracop' : 'amianto') : (W[rw] ? rw : 'nessuno');
+    const w = W[d.work];
     d.asbOn = d.work === 'amianto';
-    const remM2 = d.work === 'nessuno' ? 0 : (S.asb_m2 > 0 ? S.asb_m2 : (S.roof_type === 'amianto' ? S.roof_area : 0));
-    d.remM2 = remM2; d.asbM2 = d.asbOn ? remM2 : 0;
-    d.redo = d.work === 'nessuno' ? 'nessuno' : (S.asb_redo || 'sandwich');
+    const remM2 = !w ? 0 : (S.asb_m2 > 0 ? S.asb_m2 : (S.roof_type === 'amianto' ? S.roof_area : 0));
+    d.remM2 = remM2; d.asbM2 = (d.work === 'amianto' || d.work === 'sovracop') ? remM2 : 0;
+    d.redo = !w ? 'nessuno' : d.work === 'guaina' ? 'guaina' : (S.asb_redo || 'sandwich');
     d.redoM2 = d.redo === 'nessuno' ? 0 : (S.redo_m2 > 0 ? S.redo_m2 : remM2);
-    const remRate = { amianto: 250, lamiera: 400, sandwich_old: 300 }[d.work] || 400;
-    d.asbDays = remM2 > 0 ? Math.ceil(remM2 / remRate) : 0;     // giorni di rimozione (anche non amianto)
-    const WL = { amianto: 'Bonifica amianto', lamiera: 'Sostituzione lamiera esistente', sandwich_old: 'Sostituzione sandwich esistente' }[d.work];
-    if (d.work !== 'nessuno' && !(remM2 > 0)) chk('warn', `${WL} senza superficie`, 'Inserire i m² da rimuovere.', '');
-    if (d.work !== 'nessuno' && d.work !== 'amianto' && d.redo === 'nessuno') chk('err', 'Sostituzione senza nuova copertura', 'Togliendo la copertura esistente serve un rifacimento: scegliere sandwich o lamiera.', '');
+    d.openM2 = w && w.open ? Math.max(remM2, d.redoM2) : 0;
+    const remOn = d.work === 'guaina' ? S.guaina_rem !== false : true;
+    d.asbDays = remM2 > 0 && remOn ? Math.ceil(remM2 / w.rate) : 0;
+    d.skyNew = S.sky_new_m2 > 0 ? S.sky_new_m2 : 0;
+    const WL = w ? w.l : '';
+    if (w && !(remM2 > 0)) chk('warn', `${WL} senza superficie`, 'Inserire i m² interessati.', '');
+    if (w && w.need && d.redo === 'nessuno') chk('err', `${WL} senza nuova copertura`, 'Serve un rifacimento: scegliere sandwich o lamiera.', '');
     const swTh = +S.sw_th || 60;
     const swPrice = P['sandwich_' + swTh] || P.sandwich;
     const flashM = Math.round(d.perimeter * Math.min(1, Math.sqrt((d.redoM2 || remM2) / Math.max(S.roof_area, 1))));
-    if (remM2 > 0 && S.redo_mode === 'corpo') {
-d.redoParam = (d.asbOn ? P.asb_rem + P.asb_plan / remM2 : (d.work === 'lamiera' ? P.demo_sheet : P.demo_sw) * 1) * remM2 + (d.redoM2 > 0 ? (d.redo === 'grecata' ? P.redo_grec : swPrice) * d.redoM2 + P.flashing * flashM : 0);
-      add(C.CIV, 'redo_corpo', `${WL} e rifacimento copertura · a corpo (${fx(remM2, 0)} m² rimossi${d.redoM2 > 0 ? `, ${fx(d.redoM2, 0)} m² nuovi` : ''}${S.redo_corpo > 0 ? '' : ' · importo stimato a voci'})`, 1, 'a corpo', S.redo_corpo > 0 ? S.redo_corpo : Math.round(d.redoParam), { ref: d.asbOn ? 'D.Lgs. 81/08 Tit. IX · DM 06/09/1994' : 'D.Lgs. 152/2006 parte IV' });
-    } else if (remM2 > 0) {
-      if (d.asbOn) {
-        add(C.CIV, 'asb_rem', 'Bonifica amianto: incapsulamento preventivo, rimozione, confezionamento, trasporto e smaltimento (ditta iscritta Albo gestori ambientali cat. 10)', remM2, 'm²', P.asb_rem, { ref: 'D.Lgs. 81/08 Tit. IX capo III · DM 06/09/1994' });
-        add(C.CIV, 'asb_plan', 'Piano di lavoro amianto all\'ASL, ispezione finale e certificazione di avvenuto smaltimento', 1, 'a corpo', P.asb_plan, { ref: 'D.Lgs. 81/08 art. 256' });
-      } else if (d.work === 'lamiera') add(C.CIV, 'demo_sheet', 'Smontaggio copertura in lamiera grecata, calo a terra, cernita, trasporto e conferimento come rottame metallico (CER 17 04 05)', remM2, 'm²', P.demo_sheet, { ref: 'D.Lgs. 152/2006 parte IV' });
-      else add(C.CIV, 'demo_sw', 'Smontaggio pannelli sandwich esistenti, calo a terra, trasporto e conferimento a impianto autorizzato (CER 17 06 04 / 17 09 04)', remM2, 'm²', P.demo_sw, { ref: 'D.Lgs. 152/2006 parte IV' });
-      if (d.redoM2 > 0) {
-        if (d.redo === 'grecata') add(C.CIV, 'redo_grec', 'Nuova copertura in lamiera grecata zincopreverniciata (fornitura e posa)', d.redoM2, 'm²', P.redo_grec);
-        else add(C.CIV, 'sandwich', `Nuova copertura in pannello sandwich coibentato sp. ${swTh} mm (fornitura e posa, fissaggi e guarnizioni)`, d.redoM2, 'm²', swPrice);
-        add(C.CIV, 'flashing', 'Lattonerie di colmo, gronda e scossaline', flashM, 'm', P.flashing);
+    // voci a misura (in modalità "a corpo" ne resta solo la somma come riferimento)
+    const L = [];
+    const pv = (id, desc, q, um, u, ref) => { if (q > 0) L.push({ id, desc, q, um, u, ref }); };
+    if (remM2 > 0) {
+      if (d.work === 'amianto') {
+        pv('asb_rem', 'Bonifica amianto: incapsulamento preventivo, rimozione, confezionamento, trasporto e smaltimento (ditta iscritta Albo gestori ambientali cat. 10)', remM2, 'm²', P.asb_rem, 'D.Lgs. 81/08 Tit. IX capo III · DM 06/09/1994');
+        pv('asb_plan', 'Piano di lavoro amianto all\'ASL, ispezione finale e certificazione di avvenuto smaltimento', 1, 'a corpo', P.asb_plan, 'D.Lgs. 81/08 art. 256');
+      } else if (d.work === 'sovracop') {
+        pv('sovr_inc', 'Incapsulamento delle lastre in cemento-amianto prima della sovracopertura (ditta iscritta cat. 10)', remM2, 'm²', P.sovr_inc, 'DM 06/09/1994 · DM 20/08/1999');
+        pv('asb_plan', 'Notifica e piano di lavoro all\'ASL per il confinamento, procedure di foratura delle lastre', 1, 'a corpo', P.asb_plan, 'D.Lgs. 81/08 art. 250, 256');
+        pv('sovr_sub', 'Sottostruttura di sovracopertura (arcarecci od omega fissati alla struttura portante, non alle lastre)', remM2, 'm²', P.sovr_sub, 'DM 06/09/1994');
+      } else if (d.work === 'fibro') pv('demo_fibro', 'Smontaggio lastre in fibrocemento senza amianto, calo a terra, trasporto e conferimento a impianto autorizzato (CER 17 09 04)', remM2, 'm²', P.demo_fibro, 'D.Lgs. 152/2006 parte IV');
+      else if (d.work === 'lamiera') pv('demo_sheet', 'Smontaggio copertura in lamiera grecata, calo a terra, cernita, trasporto e conferimento come rottame metallico (CER 17 04 05)', remM2, 'm²', P.demo_sheet, 'D.Lgs. 152/2006 parte IV');
+      else if (d.work === 'sandwich_old') pv('demo_sw', 'Smontaggio pannelli sandwich esistenti, calo a terra, trasporto e conferimento a impianto autorizzato (CER 17 06 04 / 17 09 04)', remM2, 'm²', P.demo_sw, 'D.Lgs. 152/2006 parte IV');
+      else if (d.work === 'guaina' && remOn) pv('demo_guaina', 'Rimozione della vecchia guaina bituminosa, pulizia del supporto, trasporto e conferimento (CER 17 03 02)', remM2, 'm²', P.demo_guaina, 'D.Lgs. 152/2006 parte IV');
+    }
+    if (d.redoM2 > 0) {
+      if (d.redo === 'guaina') {
+        pv('guaina_new', 'Impermeabilizzazione su c.a.: primer, doppia membrana bitume-polimero SBS 4 + 4 mm con finitura ardesiata, risvolti e raccordi', d.redoM2, 'm²', P.guaina_new, 'UNI 11333 · UNI EN 13707');
+      } else {
+        if (d.redo === 'grecata') pv('redo_grec', 'Nuova copertura in lamiera grecata zincopreverniciata (fornitura e posa)', d.redoM2, 'm²', P.redo_grec);
+        else pv('sandwich', `Nuova copertura in pannello sandwich coibentato sp. ${swTh} mm (fornitura e posa, fissaggi e guarnizioni)`, d.redoM2, 'm²', swPrice);
+        pv('flashing', 'Lattonerie di colmo, gronda e scossaline', flashM, 'm', P.flashing);
       }
     }
-    if (d.asbOn && remM2 > 0) {
-      if (S.asb_mon !== false) add(C.CIV, 'asb_mon', 'Monitoraggio fibre aerodisperse durante la rimozione (campionamento e analisi MOCF)', d.asbDays, 'cad', P.asb_mon, { ref: 'DM 06/09/1994 · art. 254' });
-      chk('info', 'Amianto: piano di lavoro all\'ASL almeno 30 giorni prima', `Bonifica di ${fx(remM2, 0)} m² (${d.asbDays} giorni stimati). L'inizio del cantiere slitta di 30 giorni dalla presentazione, salvo urgenza. La ditta di bonifica è un'impresa esecutrice in più.`, 'D.Lgs. 81/08 art. 256 c.5');
-    }
-    if (remM2 > 0 && !d.asbOn) chk('info', `${WL}: copertura aperta durante i lavori`, `${fx(remM2, 0)} m² in ${d.asbDays} giorni di smontaggio. Reti sottocopertura sulla superficie rimossa, protezione dalla pioggia dei locali sottostanti e verifica che la lamiera esistente non contenga vernici o coibenti da caratterizzare.`, 'D.Lgs. 81/08 art. 148');
+    pv('sky_new', 'Sostituzione lucernari: rimozione e conferimento delle lastre esistenti, fornitura e posa di policarbonato con telaio, certificato anticaduta', d.skyNew, 'm²', P.sky_new, 'UNI EN 14963 · UNI EN 1873 · art. 148');
+    d.redoParam = L.reduce((a, x) => a + x.q * x.u, 0);
+    if (L.length && S.redo_mode === 'corpo') {
+      add(C.CIV, 'redo_corpo', `${WL || 'Sostituzione lucernari'}${d.redoM2 > 0 && d.work !== 'guaina' ? ' e rifacimento copertura' : ''}${d.skyNew > 0 && w ? ' e sostituzione lucernari' : ''} · a corpo (${remM2 > 0 ? fx(remM2, 0) + ' m²' : ''}${d.skyNew > 0 ? (remM2 > 0 ? ', ' : '') + fx(d.skyNew, 0) + ' m² lucernari' : ''}${S.redo_corpo > 0 ? '' : ' · importo stimato a voci'})`, 1, 'a corpo', S.redo_corpo > 0 ? S.redo_corpo : Math.round(d.redoParam), { ref: d.asbM2 > 0 ? 'D.Lgs. 81/08 Tit. IX · DM 06/09/1994' : 'D.Lgs. 152/2006 parte IV' });
+    } else for (const x of L) add(C.CIV, x.id, x.desc, x.q, x.um, x.u, { ref: x.ref || '' });
+    // analisi e monitoraggio: sempre a parte
+    if (d.asbM2 > 0 && S.asb_mon !== false) add(C.CIV, 'asb_mon', `Monitoraggio fibre aerodisperse durante ${d.work === 'sovracop' ? 'incapsulamento e forature' : 'la rimozione'} (campionamento e analisi MOCF)`, Math.max(1, d.asbDays), 'cad', P.asb_mon, { ref: 'DM 06/09/1994 · art. 254' });
+    if ((d.work === 'guaina' || d.work === 'fibro') && remM2 > 0 && S.asb_test !== false) add(C.CIV, 'asb_test', `Campionamento e analisi dei materiali sospetti di contenere amianto (${d.work === 'guaina' ? 'guaine e mastici' : 'lastre'})`, 2, 'cad', P.asb_test, { ref: 'DM 06/09/1994 All. 1 · art. 248' });
+    // verifiche
+    if (d.work === 'amianto' && remM2 > 0) chk('info', 'Amianto: piano di lavoro all\'ASL almeno 30 giorni prima', `Bonifica di ${fx(remM2, 0)} m² (${d.asbDays} giorni stimati). L'inizio del cantiere slitta di 30 giorni dalla presentazione, salvo urgenza. La ditta di bonifica è un'impresa esecutrice in più.`, 'D.Lgs. 81/08 art. 256 c.5');
+    if (d.work === 'sovracop' && remM2 > 0) chk('warn', 'Sovracopertura: verifiche prima di proporla', 'Carico aggiunto di nuova copertura e moduli sulla struttura esistente; stato delle lastre (con degrado avanzato ASL e regioni possono chiedere la rimozione); notifica all\'ASL e procedure per forature e fissaggi; accettazione da parte dell\'assicuratore dell\'impianto. L\'amianto resta nell\'edificio e va gestito nel programma di controllo.', 'DM 06/09/1994 · D.Lgs. 81/08 art. 250');
+    if (d.work === 'fibro' && remM2 > 0) chk('info', 'Fibrocemento: certificare l\'assenza di amianto prima dello smontaggio', 'Senza analisi di laboratorio le lastre vanno trattate come contenenti amianto, con bonifica e piano di lavoro.', 'D.Lgs. 81/08 art. 248');
+    if (d.work === 'guaina' && remM2 > 0) chk('info', 'Guaina esistente: possibile presenza di amianto', 'Guaine catramate e cartonfeltri posati prima del 1992 possono contenere amianto: analisi prima della rimozione o della foratura per i fissaggi.', 'D.Lgs. 81/08 art. 248');
+    if (w && w.open && d.work !== 'amianto' && remM2 > 0) chk('info', `${WL}: copertura aperta o fragile durante i lavori`, `${fx(remM2, 0)} m² in ${d.asbDays} giorni. Reti sottocopertura sulla superficie interessata e protezione dalla pioggia dei locali sottostanti.`, 'D.Lgs. 81/08 art. 148');
+    if (d.skyNew > 0) chk('info', `Sostituzione di ${fx(d.skyNew, 0)} m² di lucernari`, 'Durante lo smontaggio il lucernario è un\'apertura: restano necessarie le protezioni provvisorie. I nuovi lucernari certificati anticaduta riducono il rischio per la manutenzione futura dell\'impianto.', 'D.Lgs. 81/08 art. 148');
     if (S.roof_type === 'amianto' && d.redo === 'nessuno') chk('err', 'Moduli su fibrocemento senza rifacimento', 'Dopo la bonifica serve una nuova copertura su cui fissare l\'impianto: scegliere il rifacimento.', 'DM 06/09/1994');
     d.fragFull = RTy.frag === 'tot' && !(S.roof_type === 'amianto' && d.redoM2 > 0);
+    if (d.work === 'sovracop') d.fragFull = false;   // si lavora sopra la nuova sottostruttura, con reti sotto le lastre
     d.pitched = !!RTy.pitched;
   }
   if (mode === 'carport') {
@@ -1104,7 +1138,7 @@ d.redoParam = (d.asbOn ? P.asb_rem + P.asb_plan / remM2 : (d.work === 'lamiera' 
   const crewH = S.team * S.h_day;
   d.days = Math.max(1, Math.ceil(d.hTot / crewH)) + (mode === 'carport' ? Math.ceil(d.hSteel / (S.team * S.h_day)) : 0);
   d.daysCivil = mode === 'carport' ? Math.ceil(d.ncol / 6) + 2 : 0;
-  d.daysTot = d.days + d.daysCivil + (mode === 'roof' ? (d.asbDays || 0) + (d.redoM2 > 0 ? Math.ceil(d.redoM2 / 400) : 0) : 0);
+  d.daysTot = d.days + d.daysCivil + (mode === 'roof' ? (d.asbDays || 0) + (d.redoM2 > 0 ? Math.ceil(d.redoM2 / 400) : 0) + (d.skyNew > 0 ? Math.ceil(d.skyNew / 80) : 0) : 0);
   d.months = Math.max(1, Math.ceil(d.daysTot / 21));
 
   const tagH = (k) => d.mdoManual && S['h_' + k] > 0 ? ' · ore inserite a mano' : '';
@@ -1164,7 +1198,7 @@ d.redoParam = (d.asbOn ? P.asb_rem + P.asb_plan / remM2 : (d.work === 'lamiera' 
     d.fallProtAuto = d.fragFull ? (S.roof_type === 'amianto' ? 'reti' : 'camminamenti') : 'nessuna';
     d.fallProt = (S.fall_prot && S.fall_prot !== 'auto') ? S.fall_prot : d.fallProtAuto;
     // reti sottocopertura: sempre dove la copertura viene rimossa o rifatta; sulla zona di lavoro se la protezione scelta sono le reti
-    d.netsAuto = Math.round(Math.max(d.remM2 || 0, d.redoM2 || 0, d.fallProt === 'reti' ? d.workArea : 0));
+    d.netsAuto = Math.round(Math.max(d.openM2 || 0, d.fallProt === 'reti' ? d.workArea : 0));
     d.nets = (typeof S.nets_m2 === 'number') ? S.nets_m2 : d.netsAuto;
     d.walkAuto = d.fallProt === 'camminamenti' ? Math.round(d.workArea * 0.15) : 0;
     d.walk = (typeof S.walk_m2 === 'number') ? S.walk_m2 : d.walkAuto;
@@ -1335,7 +1369,7 @@ const CAT_ORDER_ALL = ['Moduli e ottimizzatori', 'Strutture di supporto', 'Inver
   'Quadri, protezioni e connessione', 'Monitoraggio', 'Opere edili in copertura', 'Opere civili e fondazioni',
   'Costi della sicurezza (All. XV D.Lgs. 81/08)', 'Coordinamento sicurezza CSP/CSE', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
 const DM_STR_IDS = new Set(['steel', 'clamps_cp', 'st_budget', 'sheet_cp', 'gutter_cp', 'plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'mdo_steel']);
-const DM_EDI_IDS = new Set(['asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'redo_corpo', 'demo_sheet', 'demo_sw', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
+const DM_EDI_IDS = new Set(['demo_fibro', 'demo_guaina', 'guaina_new', 'sovr_inc', 'sovr_sub', 'sky_new', 'asb_test', 'asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'redo_corpo', 'demo_sheet', 'demo_sw', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
 // classe DM di una voce del computo (per l'importo V dei compensi): imp, str, edi o '' se esclusa
 function dmClass(it, mode, isSite) {
   if (it.cat === SITE_CAT.PRO || it.cat === SITE_CAT.CSP) return '';
@@ -1642,7 +1676,7 @@ function sectionStateDefault(mode) {
   };
   if (mode === 'roof') return Object.assign(base, {
     roof_type: 'grecata', roof_area: 2600, fill: 0, kwp_target: 300,
-    roof_capacity: 25, ballast_kg: null, roof_work: 'nessuno', asb_m2: 0, asb_redo: 'sandwich', redo_m2: 0, asb_mon: true, sw_th: 60, redo_mode: 'param', redo_corpo: 0,
+    roof_capacity: 25, ballast_kg: null, roof_work: 'nessuno', asb_m2: 0, asb_redo: 'sandwich', redo_m2: 0, asb_mon: true, sw_th: 60, redo_mode: 'param', redo_corpo: 0, guaina_rem: true, asb_test: true, sky_new_m2: 0,
     fall_prot: 'auto', nets_m2: null, walk_m2: null, fall_kit: 'auto',
     eave_h: 8, perimeter: 0, edge_pct: 100, skylight_m2: null, lifeline_m: 0,
     lift: 'gru', lift_days: 0, ple: true, ple_days: 0, storage_m2: 0, scaf_m: 0, towers: 0, equip: true, prog_str: true
@@ -1758,18 +1792,22 @@ function secGroups(mode) {
       { k: 'prog_str', l: 'Verifica strutturale della copertura', t: 'chk' }
     ]
   } : null);
-  const work = (s) => s.roof_type === 'amianto' ? 'amianto' : (s.roof_work || 'nessuno');
+  const work = (s) => s.roof_type === 'amianto' ? (s.roof_work === 'sovracop' ? 'sovracop' : 'amianto') : (s.roof_work || 'nessuno');
   const wOn = (s) => work(s) !== 'nessuno';
+  const anyW = (s) => wOn(s) || s.sky_new_m2 > 0;
   if (R) g.push({
-    id: 'asb', title: 'Intervento sulla copertura esistente', sub: 'Bonifica amianto o sostituzione di lamiera e sandwich, con rifacimento', fields: [
-      { k: 'roof_work', l: 'Intervento', t: 'sel', wide: true, o: [['nessuno', 'Nessuno'], ['amianto', 'Bonifica amianto e rifacimento'], ['lamiera', 'Sostituzione lamiera grecata esistente'], ['sandwich_old', 'Sostituzione pannelli sandwich esistenti']], show: (s) => s.roof_type !== 'amianto', h: 'Anche parziale. Con tipologia "Fibrocemento" la bonifica è sempre attiva.' },
-      { k: 'redo_mode', l: 'Stima', t: 'sel', o: [['param', 'A voci (m² × prezzi)'], ['corpo', 'A corpo (importo unico)']], show: wOn, h: 'A corpo: un solo importo per smontaggio, smaltimento, nuova copertura e lattonerie. Sicurezza, durata e compensi restano calcolati sui m².' },
-      { k: 'redo_corpo', l: 'Importo a corpo', u: '€', step: 100, auto: (r) => r.d.redoParam ? nf(r.d.redoParam, 0) : '', show: (s) => wOn(s) && s.redo_mode === 'corpo', h: 'Vuoto = stima a voci (valore in arancio). Inserisci l\'offerta del lattoniere o della ditta di bonifica.' },
-      { k: 'asb_m2', l: 'Superficie da rimuovere', u: 'm²', auto: (r, s) => s.roof_type === 'amianto' ? nf(s.roof_area, 0) : '', show: wOn },
-      { k: 'asb_redo', l: 'Nuova copertura', t: 'sel', o: [['sandwich', 'Pannello sandwich coibentato'], ['grecata', 'Lamiera grecata'], ['nessuno', 'Nessuna (sola rimozione)']], show: wOn },
-      { k: 'sw_th', l: 'Spessore sandwich', t: 'sel', o: [['40', '40 mm · 38 €/m²'], ['60', '60 mm · 42 €/m²'], ['80', '80 mm · 47 €/m²'], ['100', '100 mm · 52 €/m²']], show: (s) => wOn(s) && s.asb_redo === 'sandwich' && s.redo_mode !== 'corpo', h: 'Prezzi di fornitura e posa (stima di mercato): sostituisci con l\'offerta del lattoniere.' },
-      { k: 'redo_m2', l: 'Superficie da rifare', u: 'm²', auto: (r) => r.d.remM2 ? nf(r.d.remM2, 0) : '', show: (s) => wOn(s) && s.asb_redo !== 'nessuno', h: 'Vuoto = uguale alla superficie rimossa.' },
-      { k: 'asb_mon', l: 'Monitoraggio fibre aerodisperse (1 campionamento per giorno di rimozione)', t: 'chk', wide: true, show: (s) => work(s) === 'amianto' }
+    id: 'asb', title: 'Intervento sulla copertura esistente', sub: 'Bonifica, sovracopertura, sostituzione, impermeabilizzazione, lucernari', fields: [
+      { k: 'roof_work', l: 'Intervento', t: 'sel', wide: true, o: [['nessuno', 'Nessuno'], ['amianto', 'Bonifica amianto (rimozione) e rifacimento'], ['sovracop', 'Sovracopertura (confinamento) di lastre in cemento-amianto'], ['fibro', 'Sostituzione lastre in fibrocemento senza amianto'], ['lamiera', 'Sostituzione lamiera grecata esistente'], ['sandwich_old', 'Sostituzione pannelli sandwich esistenti'], ['guaina', 'Rifacimento impermeabilizzazione (guaina su c.a. o solaio)']], h: 'Anche parziale. Con tipologia "Fibrocemento (amianto)" valgono solo rimozione o sovracopertura.' },
+      { k: 'asb_m2', l: 'Superficie interessata', u: 'm²', auto: (r, s) => s.roof_type === 'amianto' ? nf(s.roof_area, 0) : '', show: wOn },
+      { k: 'asb_redo', l: 'Nuova copertura', t: 'sel', o: [['sandwich', 'Pannello sandwich coibentato'], ['grecata', 'Lamiera grecata'], ['nessuno', 'Nessuna (sola rimozione)']], show: (s) => wOn(s) && work(s) !== 'guaina' },
+      { k: 'guaina_rem', l: 'Rimozione della guaina esistente', t: 'chk', show: (s) => work(s) === 'guaina', h: 'Togli la spunta per posare la nuova guaina sopra la vecchia, se il supporto lo consente.' },
+      { k: 'sw_th', l: 'Spessore sandwich', t: 'sel', o: [['40', '40 mm · 38 €/m²'], ['60', '60 mm · 42 €/m²'], ['80', '80 mm · 47 €/m²'], ['100', '100 mm · 52 €/m²']], show: (s) => wOn(s) && work(s) !== 'guaina' && s.asb_redo === 'sandwich' && s.redo_mode !== 'corpo', h: 'Fornitura e posa (stima di mercato): sostituisci con l\'offerta del lattoniere.' },
+      { k: 'redo_m2', l: 'Superficie da rifare', u: 'm²', auto: (r) => r.d.remM2 ? nf(r.d.remM2, 0) : '', show: (s) => wOn(s) && s.asb_redo !== 'nessuno', h: 'Vuoto = uguale alla superficie interessata.' },
+      { k: 'sky_new_m2', l: 'Lucernari da sostituire', u: 'm²', h: 'Rimozione e nuovi lucernari in policarbonato certificati anticaduta. 0 = nessuno. Si somma all\'intervento scelto sopra.' },
+      { k: 'redo_mode', l: 'Stima', t: 'sel', o: [['param', 'A voci (m² × prezzi)'], ['corpo', 'A corpo (importo unico)']], show: anyW, h: 'A corpo: un solo importo per le opere sopra. Sicurezza, durata e compensi restano calcolati sui m²; analisi e monitoraggio amianto restano a parte.' },
+      { k: 'redo_corpo', l: 'Importo a corpo', u: '€', step: 100, auto: (r) => r.d.redoParam ? nf(r.d.redoParam, 0) : '', show: (s) => anyW(s) && s.redo_mode === 'corpo', h: 'Vuoto = stima a voci (valore in arancio). Inserisci l\'offerta della ditta.' },
+      { k: 'asb_mon', l: 'Monitoraggio fibre aerodisperse (1 campionamento per giorno di lavoro)', t: 'chk', wide: true, show: (s) => work(s) === 'amianto' || work(s) === 'sovracop' },
+      { k: 'asb_test', l: 'Analisi amianto sui materiali esistenti (2 campioni)', t: 'chk', wide: true, show: (s) => work(s) === 'guaina' || work(s) === 'fibro' }
     ]
   });
   g.push(!R ? {
