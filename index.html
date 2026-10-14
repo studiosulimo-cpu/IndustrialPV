@@ -504,7 +504,7 @@ const INV_PRESETS = {
   i30:  { name: 'Trifase 30 kW · 4 MPPT',  pac: 30,  mppt: 4,  inp: 2, vmax: 1100, vmin: 200, vmaxm: 1000, imax: 26, isc: 40, iac: 48.0, vac: 400, price: 1900 },
   i50:  { name: 'Trifase 50 kW · 5 MPPT',  pac: 50,  mppt: 5,  inp: 2, vmax: 1100, vmin: 200, vmaxm: 1000, imax: 26, isc: 40, iac: 80.0, vac: 400, price: 2700 },
   i100: { name: 'Trifase 100 kW · 10 MPPT', pac: 100, mppt: 10, inp: 2, vmax: 1100, vmin: 200, vmaxm: 1000, imax: 26, isc: 40, iac: 160.0, vac: 400, price: 4600 },
-  i150: { name: 'Trifase 150 kW · 14 MPPT', pac: 150, mppt: 14, inp: 2, vmax: 1100, vmin: 180, vmaxm: 1000, imax: 30, isc: 50, iac: 240.0, vac: 400, price: 6300 },
+  i150: { name: 'Trifase 150 kW · 7 MPPT (14 ingressi)', pac: 150, mppt: 7, inp: 2, vmax: 1100, vmin: 180, vmaxm: 1000, imax: 40, isc: 60, iac: 240.0, vac: 400, price: 5500 },
   i215: { name: '1500 V 215 kW · 9 MPPT · uscita 800 V', pac: 215, mppt: 9, inp: 2, vmax: 1500, vmin: 500, vmaxm: 1500, imax: 30, isc: 50, iac: 155.2, vac: 800, price: 7500 }
 };
 
@@ -567,7 +567,7 @@ function qsk(zone, as) {
 /* ---------- Prezzi unitari di default (tutti sovrascrivibili nel computo) ---------- */
 const PRICES = {
   // moduli e ottimizzatori
-  opt: 43.4, opt_ctrl: 174.86,
+  opt: 55, opt_ctrl: 174.86,
   // strutture tetto
   ballast: 0.09, mat_prot: 2.0,
   st_minirail: 3.3, st_rail: 6.0, st_clamp: 1.6, st_screw: 0.30, st_bracket: 4.5, st_hook: 4.0, st_splice: 2.5,
@@ -1109,7 +1109,7 @@ function compute(S, mode, opts) {
     H.sheet = S.cover === 'lamiera' ? d.Acov * 0.15 : 0;
     H.led = S.led ? Math.ceil(d.stalls / 2) * 1.5 : 0;
   }
-  H.opt = d.Nopt * 0.08;
+  H.opt = d.Nopt * 10 / 60;   // 10 minuti per ottimizzatore (fissaggio al telaio e collegamenti)
   H.strings = d.Nstr * 1.2;
   H.trays = d.trayDC * 0.15 + d.trayAC * 0.25;
   H.ac = (d.mAC1 * (0.06 + 0.002 * d.ac1.S)) + (d.mAC2 * (0.06 + 0.002 * d.ac2.S));
@@ -1715,7 +1715,9 @@ function normalizeSite(x) {
     const d = sectionStateDefault(mode); const st = sec.state || {};
     const o = Object.assign(d, st);
     if (mode === 'roof' && !st.roof_work) o.roof_work = st.asb_on ? 'amianto' : 'nessuno';   // migrazione dalla casella "bonifica amianto"
-    o.mod = Object.assign({}, d.mod, st.mod || {}); o.inv = Object.assign({}, d.inv, st.inv || {}); o.st = Object.assign({}, d.st, st.st || {}); o.ov = st.ov || {}; o.qov = st.qov || {};
+    o.mod = Object.assign({}, d.mod, st.mod || {}); o.inv = Object.assign({}, d.inv, st.inv || {});
+    // inverter scelto da elenco: dati elettrici sempre allineati al catalogo attuale; il prezzo resta quello inserito, salvo il vecchio default
+    if (E.INV_PRESETS[o.inv_preset]) { const cur = E.INV_PRESETS[o.inv_preset], OLD = { i150: 6300 }; const keep = st.inv && st.inv.price != null && st.inv.price !== OLD[o.inv_preset] ? st.inv.price : cur.price; o.inv = Object.assign({}, cur, { price: keep }); } o.st = Object.assign({}, d.st, st.st || {}); o.ov = st.ov || {}; o.qov = st.qov || {};
     return { id: sec.id || uid(), mode, name: sec.name || (mode === 'roof' ? 'Tetto' : 'Pensilina'), state: o };
   });
   s.v = SCHEMA;
