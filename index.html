@@ -392,7 +392,7 @@ details.method .notes{margin-top:12px}
     </div>
     <div id="lower"></div>
     <section class="blk">
-      <div class="blkhead"><div><h2>Riepilogo commessa</h2><p id="recapSub"></p></div><div class="recapbar"><button class="btn sm primary" id="btnPrintRecap" type="button">Stampa riepilogo</button><button class="btn sm" id="btnPrintFull" type="button">Stampa completa</button><button class="btn sm" id="btnXlsx" type="button">Esporta Excel</button><button class="btn sm" id="btnCopyRecap" type="button">Copia riepilogo</button><button class="btn sm" id="btnCopyAll" type="button">Copia computo completo</button></div></div>
+      <div class="blkhead"><div><h2>Riepilogo commessa</h2><p id="recapSub"></p></div><div class="recapbar"><button class="btn sm primary" id="btnPrintRecap" type="button">Stampa riepilogo</button><button class="btn sm" id="btnPrintFull" type="button">Stampa completa</button><button class="btn sm" id="btnXlsx" type="button">Excel interno</button><button class="btn sm" id="btnXlsxCli" type="button">Excel per il committente</button><button class="btn sm" id="btnCopyRecap" type="button">Copia riepilogo</button><button class="btn sm" id="btnCopyAll" type="button">Copia computo completo</button></div></div>
       <div class="recap" id="recap"></div>
     </section>
     <section class="blk"><details class="method"><summary>Metodo e riferimenti</summary>
@@ -431,7 +431,7 @@ details.method .notes{margin-top:12px}
   </section>
 </div>
 <div id="printArea" aria-hidden="true"></div>
-<div id="printMenu" hidden><button class="btn sm primary" id="pmRecap" type="button">Riepilogo (2 pagine circa)</button><button class="btn sm" id="pmFull" type="button">Completa con computo</button><button class="btn sm" id="pmXlsx" type="button">Excel con formule (.xlsx)</button></div>
+<div id="printMenu" hidden><button class="btn sm primary" id="pmRecap" type="button">Riepilogo (2 pagine circa)</button><button class="btn sm" id="pmFull" type="button">Completa con computo</button><button class="btn sm" id="pmXlsx" type="button">Excel interno con formule (costi e margini)</button><button class="btn sm" id="pmXlsxCli" type="button">Excel per il committente (solo prezzi)</button></div>
 <div id="toast" hidden role="status"></div>
 <script>/*! ExcelJS 19-10-2023 */
 
@@ -589,7 +589,7 @@ const PRICES = {
   // opere edili / civili
   asb_rem: 16, sandwich: 42, redo_grec: 26, flashing: 25, asb_plan: 900, asb_mon: 280, demo_sheet: 7, demo_sw: 11, demo_fibro: 9, demo_guaina: 5, guaina_new: 26, sovr_inc: 8, sovr_sub: 6, sky_new: 95, asb_test: 250, sandwich_40: 38, sandwich_60: 42, sandwich_80: 47, sandwich_100: 52,
   plinth_m3: 260, anchor_kit: 120, asphalt: 30, soil: 25, micropile_m: 90,
-  geo: 2500, trench: 55, pit: 220, led: 190, ev: 1700, bumper: 95, marking: 25,
+  geo: 2500, trench: 55, pit: 220, trench_cls: 65, trench_x: 650, reinf_steel: 4.2, reinf_frp: 180, led: 190, ev: 1700, bumper: 95, marking: 25,
   // sicurezza
   parap_ms: 23, parap_nolo: 2.0, scaf_ms: 24, scaf_nolo: 2.8, tower_ms: 1200, tower_nolo: 150,
   skylight: 10.93, skylight_nolo: 0.84, nets_ms: 12.66, nets_nolo: 0, walk_ms: 12.43, walk_nolo: 1.22, parapC_ms: 30, parapC_nolo: 15, fall_kit: 1028, lifeline: 55, lifeline_doc: 600, fence: 3.70, fence_nolo: 0.46, site_hut: 550.32, site_hut_n: 244.57, dpi: 500, meet: 70,
@@ -1089,14 +1089,30 @@ function compute(S, mode, opts) {
       add(C.CIV, 'micropile', 'Micropali Ø 200 mm (2 per pilastro, L 6 m) con cordolo di testa', d.ncol * 12, 'm', P.micropile_m, { ref: 'NTC 2018 §6.4' });
     }
     add(C.CIV, 'anchor_kit', 'Tirafondi, piastre di base e inghisaggi', d.ncol, 'pz', P.anchor_kit, { mat: true });
-    add(C.CIV, 'asphalt', 'Taglio, demolizione e ripristino pavimentazione bituminosa', d.ncol * 8 + Math.round(S.trench_m * 0.6), 'm²', P.asphalt);
+    add(C.CIV, 'asphalt', 'Taglio, demolizione e ripristino pavimentazione bituminosa attorno ai plinti', d.ncol * 8, 'm²', P.asphalt);
     add(C.CIV, 'geo', 'Indagine e relazione geologica-geotecnica', 1, 'a corpo', P.geo, { ref: 'NTC 2018 §6.2.2' });
-    add(C.CIV, 'trench', 'Cavidotto interrato (scavo, 2 corrugati Ø125, nastro segnalatore, rinterro)', S.trench_m, 'm', P.trench);
-    add(C.CIV, 'pit', 'Pozzetti di ispezione con chiusino carrabile D400', S.trench_m > 0 ? Math.ceil(S.trench_m / 25) + 1 : 0, 'pz', P.pit);
     add(C.CIV, 'bumper', 'Paracolpi di protezione pilastri', d.ncol, 'pz', P.bumper, { mat: true });
     add(C.CIV, 'marking', 'Ripristino segnaletica orizzontale stalli', d.stalls, 'stallo', P.marking);
     if (S.led) add(C.CIV, 'led', 'Illuminazione LED sotto pensilina IP66 (1 ogni 2 stalli, cablata)', Math.ceil(d.stalls / 2), 'pz', P.led, { mat: true, ref: 'UNI EN 12464-2' });
     if (S.ev_n > 0) add(C.CIV, 'ev', 'Punto di ricarica EV 22 kW con linea dedicata e protezioni', S.ev_n, 'pz', P.ev, { mat: true, ref: 'CEI 64-8 sez. 722' });
+  }
+  // scavi e cavidotti di collegamento al locale tecnico / cabina (tetto e pensilina)
+  d.trenchM = S.trench_m > 0 ? S.trench_m : 0;
+  if (d.trenchM > 0) {
+    const surf = S.trench_surf || 'asfalto';
+    add(C.CIV, 'trench', 'Scavo a sezione obbligata 0,4 × 0,8 m, cavidotto con 2 corrugati Ø125, nastro segnalatore, rinterro e conferimento eccedenze', d.trenchM, 'm', P.trench, { ref: 'CEI 11-17 · DPR 120/2017' });
+    add(C.CIV, 'pit', 'Pozzetti di ispezione con chiusino carrabile D400 (1 ogni 25 m e ai cambi di direzione)', Math.ceil(d.trenchM / 25) + 1, 'pz', P.pit);
+    if (surf === 'asfalto') add(C.CIV, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione bituminosa lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.asphalt);
+    else if (surf === 'cls') add(C.CIV, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione industriale in calcestruzzo lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.trench_cls);
+    if (S.trench_cross > 0) add(C.CIV, 'trench_x', 'Attraversamenti (sottoservizi, strade interne) con spingitubo o scavo a mano', S.trench_cross, 'cad', P.trench_x);
+  }
+  // rinforzi strutturali e opere edili accessorie all'installazione (solo copertura)
+  if (mode === 'roof') {
+    d.reinfKg = S.reinf_kg > 0 ? S.reinf_kg : 0; d.reinfFrp = S.reinf_frp_m2 > 0 ? S.reinf_frp_m2 : 0;
+    if (d.reinfKg > 0) add(C.CIV, 'reinf_steel', 'Carpenteria metallica di rinforzo S275 zincata (travi, arcarecci, piatti), fornita e posta con bullonature e ancoraggi chimici', d.reinfKg, 'kg', P.reinf_steel, { ref: 'NTC 2018 §8.4.3' });
+    if (d.reinfFrp > 0) add(C.CIV, 'reinf_frp', 'Rinforzo di elementi in c.a. con tessuti FRP: preparazione del supporto, primer, resina e tessuto', d.reinfFrp, 'm²', P.reinf_frp, { ref: 'NTC 2018 §8.4.3 · CNR-DT 200' });
+    if (S.reinf_corpo > 0) add(C.CIV, 'reinf_corpo', `${S.reinf_desc ? S.reinf_desc : 'Altre opere edili e strutturali accessorie all\'installazione'} · a corpo`, 1, 'a corpo', S.reinf_corpo, { ref: 'NTC 2018 cap. 8' });
+    if (d.reinfKg > 0 || d.reinfFrp > 0 || S.reinf_corpo > 0) chk('info', 'Rinforzi strutturali: progetto e titolo sismico', 'L\'intervento locale va progettato da uno strutturista, con deposito o autorizzazione sismica prima dei lavori e relazione a struttura ultimata. I compensi di progettazione e DL strutturale si calcolano sulla categoria strutture.', 'DPR 380/2001 art. 93–94 · NTC 2018 §8.4.3');
   }
 
   /* ---- Manodopera (ore) ---- */
@@ -1138,7 +1154,7 @@ function compute(S, mode, opts) {
   const crewH = S.team * S.h_day;
   d.days = Math.max(1, Math.ceil(d.hTot / crewH)) + (mode === 'carport' ? Math.ceil(d.hSteel / (S.team * S.h_day)) : 0);
   d.daysCivil = mode === 'carport' ? Math.ceil(d.ncol / 6) + 2 : 0;
-  d.daysTot = d.days + d.daysCivil + (mode === 'roof' ? (d.asbDays || 0) + (d.redoM2 > 0 ? Math.ceil(d.redoM2 / 400) : 0) + (d.skyNew > 0 ? Math.ceil(d.skyNew / 80) : 0) : 0);
+  d.daysTot = d.days + d.daysCivil + (mode === 'roof' ? (d.asbDays || 0) + (d.redoM2 > 0 ? Math.ceil(d.redoM2 / 400) : 0) + (d.skyNew > 0 ? Math.ceil(d.skyNew / 80) : 0) + Math.ceil((d.reinfKg || 0) / 500 + (d.reinfFrp || 0) / 40) + (d.trenchM > 0 ? Math.ceil(d.trenchM / 60) : 0) : 0);
   d.months = Math.max(1, Math.ceil(d.daysTot / 21));
 
   const tagH = (k) => d.mdoManual && S['h_' + k] > 0 ? ' · ore inserite a mano' : '';
@@ -1369,12 +1385,13 @@ const CAT_ORDER_ALL = ['Moduli e ottimizzatori', 'Strutture di supporto', 'Inver
   'Quadri, protezioni e connessione', 'Monitoraggio', 'Opere edili in copertura', 'Opere civili e fondazioni',
   'Costi della sicurezza (All. XV D.Lgs. 81/08)', 'Coordinamento sicurezza CSP/CSE', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
 const DM_STR_IDS = new Set(['steel', 'clamps_cp', 'st_budget', 'sheet_cp', 'gutter_cp', 'plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'mdo_steel']);
-const DM_EDI_IDS = new Set(['demo_fibro', 'demo_guaina', 'guaina_new', 'sovr_inc', 'sovr_sub', 'sky_new', 'asb_test', 'asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'redo_corpo', 'demo_sheet', 'demo_sw', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
+const DM_EDI_IDS = new Set(['trench_rip', 'trench_x', 'demo_fibro', 'demo_guaina', 'guaina_new', 'sovr_inc', 'sovr_sub', 'sky_new', 'asb_test', 'asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'redo_corpo', 'demo_sheet', 'demo_sw', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
 // classe DM di una voce del computo (per l'importo V dei compensi): imp, str, edi o '' se esclusa
 function dmClass(it, mode, isSite) {
   if (it.cat === SITE_CAT.PRO || it.cat === SITE_CAT.CSP) return '';
   if (isSite) return 'imp';
   if (DM_EDI_IDS.has(it.id)) return 'edi';
+  if (it.id === 'reinf_steel' || it.id === 'reinf_frp' || it.id === 'reinf_corpo') return 'str';
   if (mode === 'carport' && (DM_STR_IDS.has(it.id) || it.id === 'crane' || it.id === 'excav')) return 'str';
   return 'imp';
 }
@@ -1523,7 +1540,8 @@ function computeSite(site) {
   for (const r of res) for (const it of r.items) {
     if (it.cat === K.PRO) continue;
     const cp = r.sec.mode === 'carport';
-    if (EDI_IDS.has(it.id)) vEdi += it.tot;
+    if (it.id === 'reinf_steel' || it.id === 'reinf_frp' || it.id === 'reinf_corpo') vStr += it.tot;
+    else if (EDI_IDS.has(it.id)) vEdi += it.tot;
     else if (cp && (STR_IDS.has(it.id) || it.id === 'crane' || it.id === 'excav')) vStr += it.tot;
     else vImp += it.tot;
   }
@@ -1677,6 +1695,7 @@ function sectionStateDefault(mode) {
   if (mode === 'roof') return Object.assign(base, {
     roof_type: 'grecata', roof_area: 2600, fill: 0, kwp_target: 300,
     roof_capacity: 25, ballast_kg: null, roof_work: 'nessuno', asb_m2: 0, asb_redo: 'sandwich', redo_m2: 0, asb_mon: true, sw_th: 60, redo_mode: 'param', redo_corpo: 0, guaina_rem: true, asb_test: true, sky_new_m2: 0,
+    reinf_kg: 0, reinf_frp_m2: 0, reinf_corpo: 0, reinf_desc: '', trench_m: 0, trench_surf: 'asfalto', trench_cross: 0,
     fall_prot: 'auto', nets_m2: null, walk_m2: null, fall_kit: 'auto',
     eave_h: 8, perimeter: 0, edge_pct: 100, skylight_m2: null, lifeline_m: 0,
     lift: 'gru', lift_days: 0, ple: true, ple_days: 0, storage_m2: 0, scaf_m: 0, towers: 0, equip: true, prog_str: true
@@ -1685,7 +1704,7 @@ function sectionStateDefault(mode) {
     l_dc: 30, l_ac1: 15, l_ac2: 80,
     stalls: 80, layout: 'doppia', stall_w: 2.5, cov_depth: 5.0, span: 5.0, steel_kgm2: 0,
     found: 'plinto', plinth_m3: 0, cover: 'nessuna', gutters: true, led: true, ev_n: 0,
-    trench_m: 80, fence_m: 0, equip: false,
+    trench_m: 80, trench_surf: 'asfalto', trench_cross: 0, fence_m: 0, equip: false,
     ple: true, crane_days: 0, tele_days: 0, ple_days: 0, excav_days: 0
   });
 }
@@ -1812,6 +1831,21 @@ function secGroups(mode) {
       { k: 'asb_test', l: 'Analisi amianto sui materiali esistenti (2 campioni)', t: 'chk', wide: true, show: (s) => work(s) === 'guaina' || work(s) === 'fibro' }
     ]
   });
+  if (R) g.push({
+    id: 'reinf', title: 'Rinforzi strutturali e opere edili accessorie', sub: 'Interventi locali per l\'installazione, indipendenti dal rifacimento della copertura · NTC 2018 §8.4.3', fields: [
+      { k: 'reinf_kg', l: 'Carpenteria metallica di rinforzo', u: 'kg', step: 10, h: 'Travi, arcarecci, piatti in S275 zincato, forniti e posti: 4,20 €/kg (stima). Il peso viene dalla relazione dello strutturista.' },
+      { k: 'reinf_frp_m2', l: 'Rinforzo con tessuti FRP', u: 'm²', h: 'Placcaggio di travi o tegoli in c.a.: 180 €/m² (stima).' },
+      { k: 'reinf_corpo', l: 'Altre opere a corpo', u: '€', step: 100, h: 'Cordoli, ripristini del calcestruzzo, basamenti, forometrie, ecc.' },
+      { k: 'reinf_desc', l: 'Descrizione delle opere a corpo', t: 'text', wide: true, show: (s) => s.reinf_corpo > 0 }
+    ]
+  });
+  g.push({
+    id: 'trench', title: 'Scavi e cavidotti di collegamento', sub: 'Dalla sezione al locale tecnico o alla cabina', fields: [
+      { k: 'trench_m', l: 'Lunghezza dello scavo', u: 'm', h: R ? 'Tratto interrato dalla calata dal tetto al locale tecnico. 0 = linee solo in aereo o in cunicolo.' : 'Dalla pensilina al locale tecnico o alla cabina.' },
+      { k: 'trench_surf', l: 'Pavimentazione da ripristinare', t: 'sel', o: [['asfalto', 'Asfalto · 30 €/m²'], ['cls', 'Calcestruzzo industriale · 65 €/m²'], ['terreno', 'Terreno o verde (nessun ripristino)']], show: (s) => s.trench_m > 0 },
+      { k: 'trench_cross', l: 'Attraversamenti (sottoservizi, strade)', u: 'cad', show: (s) => s.trench_m > 0, h: 'Spingitubo o scavo a mano: 650 € cad. (stima).' }
+    ]
+  });
   g.push(!R ? {
     id: 'site', title: 'Pensilina', sub: 'Geometria (neve e quota nei Dati comuni)', open: true, fields: [
       { k: 'stalls', l: 'Numero posti auto', u: 'stalli', auto: (r) => r.d.stalls, h: '0 = calcolati dalla potenza obiettivo.' },
@@ -1827,7 +1861,6 @@ function secGroups(mode) {
       { k: 'gutters', l: 'Gronde e pluviali', t: 'chk' },
       { k: 'led', l: 'Illuminazione LED', t: 'chk' },
       { k: 'ev_n', l: 'Punti di ricarica EV', u: 'pz' },
-      { k: 'trench_m', l: 'Cavidotto interrato fino al quadro', u: 'm' },
       { k: 'fence_m', l: 'Recinzione di cantiere', u: 'm', auto: (r, s) => nf(2 * (r.d.Lrow + s.cov_depth * r.d.wings) + 10, 0) }
     ]
   } : null);
@@ -1950,7 +1983,9 @@ function secGroups(mode) {
       { k: 'ple_days', l: 'Giorni di PLE', u: 'gg', auto: (r) => r.d.pleDaysAuto, show: (s) => s.ple, h: 'Vuoto = per tutta la durata della posa.' }
     ]
   });
-  return g.filter(Boolean);
+  const out = g.filter(Boolean);
+  if (!R) { const i = out.findIndex(x => x.id === 'trench'); const t = out.splice(i, 1)[0]; out.splice(out.findIndex(x => x.id === 'site') + 1, 0, t); }
+  return out;
 }
 const COMMON_GROUPS = [
   { id: 'clima', title: 'Località e clima', sub: 'Valgono per tutte le sezioni', open: true, fields: [
@@ -2356,6 +2391,7 @@ document.addEventListener('click', (e) => {
   if (t.id === 'navHome' || t.id === 'btnHome') return go('home');
   if (t.id === 'btnPrint') { const m = $('#printMenu'); m.hidden = !m.hidden; return; }
   if (t.id === 'btnPrintRecap' || t.id === 'pmRecap') { $('#printMenu').hidden = true; return printSite(false); }
+  if (t.id === 'btnXlsxCli' || t.id === 'pmXlsxCli') { $('#printMenu').hidden = true; exportXlsxClient().catch(e => toast('Errore nella creazione del file Excel: ' + e.message)); return; }
   if (t.id === 'btnXlsx' || t.id === 'pmXlsx') { $('#printMenu').hidden = true; exportXlsx().catch(e => toast('Errore nella creazione del file Excel: ' + e.message)); return; }
   if (t.id === 'btnPrintFull' || t.id === 'pmFull') { $('#printMenu').hidden = true; return printSite(true); }
   if (t.id === 'bkPill' || t.id === 'btnBackup') { const p = $('#backup'); p.hidden = !p.hidden; $('#bkSite').hidden = !(app.view === 'site' && s); return; }
@@ -2542,7 +2578,7 @@ async function exportXlsx() {
   put(wc, 'A2', 'Celle gialle con testo blu = modificabili (quantità e prezzi unitari). Il totale di riga e tutti i riepiloghi si ricalcolano. Le quantità automatiche non si ridimensionano da sole: vedi foglio Note.', { font: { italic: true, size: 9 } });
   hdr(wc, 4, ['Sezione', 'Categoria', 'Codice', 'Voce', 'Riferimento', 'Q.tà', 'U.M.', 'Prezzo unit.', 'Materiale', 'Classe DM', 'Totale', 'Progett./DL']);
   const rows = [];
-  for (const r of R.res) for (const it of r.items) rows.push({ sec: r.sec.name, mode: r.sec.mode, it, site: false });
+  R.res.forEach((r, si) => { for (const it of r.items) rows.push({ sec: r.sec.name, mode: r.sec.mode, it, site: false, si }); });
   const commons = R.items.filter(i => i.id !== 'coord'), coordIt = R.items.find(i => i.id === 'coord');
   for (const it of commons) rows.push({ sec: 'Costi comuni di sito', it, site: true });
   if (coordIt) rows.push({ sec: 'Costi comuni di sito', it: coordIt, site: true, coord: true });
@@ -2696,6 +2732,45 @@ async function exportXlsx() {
   put(wr, 'D' + n, fx(`IF($C$11>0,C${n}/$C$11,0)`, t.costKw), { fmt: EUR, font: { bold: true }, border: line });
   put(wr, 'E' + n, fx(`IF($C$18>0,C${n}/$C$18,0)`, 1), { fmt: PCT, font: { bold: true }, border: line });
 
+  /* ---------- Un foglio per ogni sezione (collegato al Computo) ---------- */
+  const used = new Set(['Riepilogo', 'Computo', 'Compensi DM', 'Note']);
+  const sheetName = (nm) => { let b = String(nm).replace(/[\[\]:*?\/\\']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 28) || 'Sezione'; let x = b, i = 2; while (used.has(x)) x = `${b.slice(0, 25)} (${i++})`; used.add(x); return x; };
+  R.res.forEach((r, si) => {
+    const ws = wb.addWorksheet(sheetName(r.sec.name)); const d = r.d, sr = sec0 + si;
+    ws.columns = [{ width: 30 }, { width: 62 }, { width: 10 }, { width: 9 }, { width: 13 }, { width: 14 }, { width: 11 }];
+    put(ws, 'A1', r.sec.name, { font: { bold: true, size: 14, color: { argb: HEAD } } });
+    put(ws, 'A2', `${r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'} · ${nf(d.Pdc, 1)} kWp · ${nf(d.Nmod)} moduli ${r.sec.state.mod ? r.sec.state.mod.name : ''} · ${d.Ninv} × ${d.I ? d.I.name : ''}${d.Ns ? ` · stringhe ${d.Nstr} × ${d.Ns}` : ''} · durata ${d.daysTot} giorni`, { font: { size: 9 } });
+    put(ws, 'A3', 'Valori collegati al foglio Computo: quantità e prezzi si modificano lì e questo foglio si aggiorna.', { font: { italic: true, size: 9 } });
+    hdr(ws, 5, ['Categoria', 'Voce', 'Q.tà', 'U.M.', 'Prezzo unit.', 'Totale', '% sezione']);
+    let n = 6; const first = 6;
+    rows.forEach((x, k) => {
+      if (x.site || x.si !== si) return;
+      const cr = r0 + k, it = x.it;
+      put(ws, 'A' + n, it.cat, { font: { size: 9 } }); put(ws, 'B' + n, it.desc, { al: { wrapText: true, vertical: 'top' } });
+      put(ws, 'C' + n, fx(`Computo!F${cr}`, it.qty), { fmt: it.qty % 1 ? '#,##0.0' : '#,##0', font: { color: { argb: GRN } } });
+      put(ws, 'D' + n, it.um); put(ws, 'E' + n, fx(`Computo!H${cr}`, it.unit), { fmt: EUR2, font: { color: { argb: GRN } } });
+      put(ws, 'F' + n, fx(`Computo!K${cr}`, it.tot), { fmt: EUR, font: { color: { argb: GRN } } });
+      n++;
+    });
+    const last = n - 1, tot = n + 1;
+    for (let q = first; q <= last; q++) put(ws, 'G' + q, fx(`IF($F$${tot}>0,F${q}/$F$${tot},0)`, 0), { fmt: PCT });
+    const L2 = [
+      ['Costo diretto della sezione', `SUM(F${first}:F${last})`, r.direct, EUR, true],
+      ['Quota costi comuni, trasporto e imprevisti (ripartita per kWp)', `Riepilogo!E${sr}`, r.alloc - r.direct, EUR],
+      ['COSTO DELLA SEZIONE', `Riepilogo!F${sr}`, r.alloc, EUR, true, COP],
+      ['  costo €/kWp', `Riepilogo!G${sr}`, d.Pdc > 0 ? r.alloc / d.Pdc : 0, EUR, false, COP],
+      ['PREZZO DELLA SEZIONE', `Riepilogo!H${sr}`, r.allocPrice, EUR, true, HEAD],
+      ['  prezzo €/kWp', `Riepilogo!I${sr}`, d.Pdc > 0 ? r.allocPrice / d.Pdc : 0, EUR, false, HEAD]
+    ];
+    L2.forEach(([l, f, v, fm, b, col], i) => { const rr = tot + i; put(ws, 'B' + rr, l, { font: { bold: !!b, color: col ? { argb: col } : undefined } }); put(ws, 'F' + rr, fx(f, v), { fmt: fm, font: { bold: !!b, color: col ? { argb: col } : undefined }, border: i === 0 ? line : undefined }); });
+    // riepilogo per categoria della sezione
+    const c0 = tot + L2.length + 2; hdr(ws, c0 - 1, ['', 'Categoria', '', '', '', 'Costo', '% sezione']);
+    const cats = E.CAT_ORDER_ALL.filter(c => r.items.some(i => i.cat === c));
+    cats.forEach((c, i) => { const rr = c0 + i; const v = r.items.filter(x => x.cat === c).reduce((a, b) => a + b.tot, 0); put(ws, 'B' + rr, c); put(ws, 'F' + rr, fx(`SUMIFS($F$${first}:$F$${last},$A$${first}:$A$${last},B${rr})`, v), { fmt: EUR }); put(ws, 'G' + rr, fx(`IF($F$${tot}>0,F${rr}/$F$${tot},0)`, r.direct > 0 ? v / r.direct : 0), { fmt: PCT }); });
+    ws.views = [{ state: 'frozen', ySplit: 5 }];
+    ws.pageSetup = { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
+  });
+
   /* ---------- Note ---------- */
   const wn = wb.addWorksheet('Note'); wn.columns = [{ width: 120 }];
   const notes = [
@@ -2706,6 +2781,8 @@ async function exportXlsx() {
     ['Le quote dei costi comuni sono ripartite in proporzione ai kWp delle sezioni. Il prezzo di ogni sezione è il suo costo × (1 + markup).'],
     ['Costi della sicurezza: stima analitica ai sensi del D.Lgs. 81/08 All. XV punto 4, non soggetti a ribasso. Il coordinamento CSP/CSE è una spesa tecnica ed è separato.'],
     ['Compensi: DM 17/06/2016 come aggiornato dall\'All. I.13 D.Lgs. 36/2023; colonna Classe DM del Computo = categoria a cui la voce contribuisce (imp, str, edi; vuota = esclusa da V).'],
+    ['Un foglio per ogni tetto o pensilina riprende le voci della sezione dal Computo, con costo, quota comune, prezzo ed €/kWp: si aggiorna da solo.'],
+    ['Documento INTERNO: contiene costi, markup e margini. Per il committente usa l\'esportazione "Excel per il committente".'],
     ['Prezzi unitari di riferimento da sostituire con le quotazioni dei fornitori. Importi IVA esclusa.'],
     [''], ['Verifiche aperte al momento dell\'esportazione', true],
     ...R.checks.filter(c => c.lvl === 'err' || c.lvl === 'warn').map(c => [`${c.lvl === 'err' ? 'ERRORE' : 'Avviso'} · ${c.sec || ''} · ${c.title} — ${String(c.detail).replace(/<[^>]+>/g, '')}`])
@@ -2714,19 +2791,107 @@ async function exportXlsx() {
 
   for (const w of [wr, wc]) { w.pageSetup = { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } }; }
   wb.views = [{ activeTab: 0 }];
+  return saveXlsx(wb, `stima-FV_${s.name.replace(/[^\w-]+/g, '_').slice(0, 40)}_${new Date().toISOString().slice(0, 10)}.xlsx`, 'File Excel interno scaricato (con costi e margini).');
+}
+async function saveXlsx(wb, name, msg) {
   const buf = await wb.xlsx.writeBuffer();
-  const d = new Date(); const stamp = d.toISOString().slice(0, 10);
-  const name = `stima-FV_${s.name.replace(/[^\w-]+/g, '_').slice(0, 40)}_${stamp}.xlsx`;
   try {
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-    toast('File Excel scaricato.');
+    toast(msg);
   } catch (e) { toast('Download non riuscito in questa finestra: apri lo strumento da GitHub Pages.'); }
   return buf;
 }
 
-window.PVExport = { exportXlsx, site, setCommon: (o) => { Object.assign(site().common, o); update(); } };
+/* ================= Excel per il committente: solo prezzi, nessun costo né margine ================= */
+async function exportXlsxClient() {
+  const s = site(); if (!s) return;
+  if (typeof ExcelJS === 'undefined') return toast('Libreria Excel non disponibile in questa pagina.');
+  const R = E.computeSite(s), t = R.tot, sd = R.sd;
+  const wb = new ExcelJS.Workbook(); wb.creator = s.client || ''; wb.created = new Date(); wb.calcProperties = { fullCalcOnLoad: true };
+  const F = 'Arial', HEAD = 'FF2441A6', SOFT = 'FFE3E8F7';
+  const EUR = '#,##0 "€";-#,##0 "€";"-"', EUR2 = '#,##0.00 "€";-#,##0.00 "€";"-"', NUM = '#,##0.0;-#,##0.0;"-"';
+  const put = (ws, ref, v, o = {}) => { const c = ws.getCell(ref); c.value = v; c.font = Object.assign({ name: F, size: 10 }, o.font || {}); if (o.fmt) c.numFmt = o.fmt; if (o.fill) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: o.fill } }; if (o.al) c.alignment = o.al; if (o.border) c.border = o.border; return c; };
+  const fx = (f, r) => ({ formula: f, result: r });
+  const hdr = (ws, row, labels) => labels.forEach((l, i) => put(ws, ws.getCell(row, 1 + i).address, l, { font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 }, fill: HEAD, al: { vertical: 'middle', wrapText: true } }));
+  const line = { top: { style: 'thin' } };
+  // coefficiente unico: costo totale di commessa con markup, distribuito su tutte le voci (trasporto e imprevisti non compaiono come voci)
+  const sumItems = R.allItems.reduce((a, b) => a + b.tot, 0);
+  // i costi della sicurezza si espongono al valore di stima (non soggetti a ribasso): il margine si distribuisce sulle altre voci
+  const sicCost = R.allItems.filter(i => i.cat === E.SIC_CAT).reduce((a, b) => a + b.tot, 0);
+  const k = sumItems - sicCost > 0 ? (t.price - sicCost) / (sumItems - sicCost) : 1;
+  const pu = (it) => Math.round(it.tot / (it.qty || 1) * (it.cat === E.SIC_CAT ? 1 : k) * 100) / 100;      // prezzo unitario di vendita (sconto materiali già incluso)
+  const kw = sd.pdc, today = new Date().toLocaleDateString('it-IT');
+  const ws0 = wb.addWorksheet('Offerta');
+  const used = new Set(['Offerta', 'Opere comuni']);
+  const sheetName = (nm) => { let b = String(nm).replace(/[\[\]:*?\/\\']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 28) || 'Sezione'; let x = b, i = 2; while (used.has(x)) x = `${b.slice(0, 25)} (${i++})`; used.add(x); return x; };
+  const totRefs = [];
+  // un foglio per sezione + opere comuni
+  const blocks = R.res.map((r, si) => ({ title: r.sec.name, sub: `${r.sec.mode === 'roof' ? 'Impianto su copertura' : 'Pensilina fotovoltaica'} · ${nf(r.d.Pdc, 1)} kWp · ${nf(r.d.Nmod)} moduli ${r.sec.state.mod ? r.sec.state.mod.name : ''}`, items: r.items, r, kwp: r.d.Pdc }));
+  blocks.push({ title: 'Opere comuni', sub: 'Connessione, quadri di sito, monitoraggio, sicurezza di cantiere, progettazione, direzione lavori e pratiche', items: R.items, common: true });
+  for (const b of blocks) {
+    const ws = wb.addWorksheet(b.common ? 'Opere comuni' : sheetName(b.title));
+    ws.columns = [{ width: 66 }, { width: 10 }, { width: 9 }, { width: 14 }, { width: 15 }];
+    put(ws, 'A1', b.title, { font: { bold: true, size: 14, color: { argb: HEAD } } });
+    put(ws, 'A2', b.sub, { font: { size: 9 } });
+    put(ws, 'A3', `${s.name}${s.location ? ' · ' + s.location : ''} · ${today} · importi IVA esclusa`, { font: { size: 9, italic: true } });
+    hdr(ws, 5, ['Descrizione', 'Q.tà', 'U.M.', 'Prezzo unitario', 'Importo']);
+    let n = 6; const first = 6;
+    for (const g of E.CAT_ORDER_ALL) {
+      const its = b.items.filter(i => i.cat === g && i.tot > 0.005); if (!its.length) continue;
+      put(ws, 'A' + n, g, { font: { bold: true, color: { argb: HEAD } }, fill: SOFT }); for (const c of 'BCDE') put(ws, c + n, '', { fill: SOFT }); n++;
+      for (const it of its) {
+        put(ws, 'A' + n, it.desc, { al: { wrapText: true, vertical: 'top' } }); put(ws, 'B' + n, +(+it.qty).toFixed(3), { fmt: it.qty % 1 ? '#,##0.0' : '#,##0' }); put(ws, 'C' + n, it.um);
+        put(ws, 'D' + n, pu(it), { fmt: EUR2 }); put(ws, 'E' + n, fx(`B${n}*D${n}`, +(it.qty * pu(it)).toFixed(2)), { fmt: EUR2 }); n++;
+      }
+    }
+    const last = n - 1, tr = n + 1;
+    const tv = b.items.filter(i => i.tot > 0.005).reduce((a, it) => a + it.qty * pu(it), 0);
+    put(ws, 'A' + tr, b.common ? 'Totale opere comuni' : 'Totale sezione', { font: { bold: true }, border: line });
+    put(ws, 'E' + tr, fx(`SUMPRODUCT(B${first}:B${last},D${first}:D${last})`, tv), { fmt: EUR, font: { bold: true }, border: line });
+    if (!b.common) { put(ws, 'A' + (tr + 1), 'Prezzo €/kWp delle opere della sezione'); put(ws, 'E' + (tr + 1), fx(b.kwp > 0 ? `E${tr}/${b.kwp}` : '0', b.kwp > 0 ? tv / b.kwp : 0), { fmt: EUR }); }
+    const sic = b.items.filter(i => i.cat === E.SIC_CAT).reduce((a, it) => a + it.qty * pu(it), 0);
+    if (sic > 0) put(ws, 'A' + (tr + 2), `di cui costi della sicurezza (D.Lgs. 81/08 All. XV): ${eur(sic)}`, { font: { size: 9, italic: true } });
+    ws.views = [{ state: 'frozen', ySplit: 5 }];
+    ws.pageSetup = { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } };
+    ws.headerFooter = { oddFooter: '&L' + s.name.replace(/&/g, '&&') + '&RPagina &P di &N' };
+    totRefs.push({ b, ref: `'${ws.name}'!E${tr}`, v: tv, sic });
+  }
+  // foglio Offerta
+  ws0.columns = [{ width: 44 }, { width: 14 }, { width: 12 }, { width: 18 }, { width: 14 }, { width: 18 }, { width: 14 }];
+  put(ws0, 'A1', `Offerta impianto fotovoltaico · ${s.name}`, { font: { bold: true, size: 16, color: { argb: HEAD } } });
+  put(ws0, 'A2', `${s.location || ''}${s.client ? ' · Committente: ' + s.client : ''} · ${today}`, { font: { size: 10 } });
+  put(ws0, 'A3', `${nf(kw, 1)} kWp complessivi · connessione in ${sd.conn === 'MT' ? 'media tensione' : 'bassa tensione'} · ${nf(sd.nmod)} moduli · importi IVA esclusa`, { font: { size: 9 } });
+  hdr(ws0, 5, ['Sezione', 'Tipo', 'kWp', 'Opere della sezione', '€/kWp', 'Con quota opere comuni', '€/kWp']);
+  const comm = totRefs[totRefs.length - 1];
+  const secR = totRefs.slice(0, -1);
+  secR.forEach((x, i) => {
+    const n = 6 + i;
+    put(ws0, 'A' + n, x.b.title); put(ws0, 'B' + n, x.b.r.sec.mode === 'roof' ? 'Copertura' : 'Pensilina'); put(ws0, 'C' + n, +x.b.kwp.toFixed(2), { fmt: NUM });
+    put(ws0, 'D' + n, fx(x.ref, x.v), { fmt: EUR }); put(ws0, 'E' + n, fx(`IF(C${n}>0,D${n}/C${n},0)`, x.b.kwp > 0 ? x.v / x.b.kwp : 0), { fmt: EUR });
+    const sh = kw > 0 ? x.b.kwp / kw : 0;
+    put(ws0, 'F' + n, fx(`D${n}+$D$${6 + secR.length}*IF($C$${8 + secR.length}>0,C${n}/$C$${8 + secR.length},0)`, x.v + comm.v * sh), { fmt: EUR, font: { bold: true } });
+    put(ws0, 'G' + n, fx(`IF(C${n}>0,F${n}/C${n},0)`, x.b.kwp > 0 ? (x.v + comm.v * sh) / x.b.kwp : 0), { fmt: EUR, font: { bold: true } });
+  });
+  const cn = 6 + secR.length;
+  put(ws0, 'A' + cn, 'Opere comuni (connessione, sicurezza di cantiere, progettazione e pratiche)', { font: { italic: true } }); put(ws0, 'D' + cn, fx(comm.ref, comm.v), { fmt: EUR, font: { italic: true } });
+  put(ws0, 'F' + cn, 'ripartite per kWp nella colonna a fianco', { font: { size: 8, italic: true } });
+  const tn = cn + 2, totV = totRefs.reduce((a, x) => a + x.v, 0);
+  put(ws0, 'A' + tn, 'TOTALE OFFERTA', { font: { bold: true, size: 12, color: { argb: HEAD } }, border: line });
+  put(ws0, 'C' + tn, fx(secR.length ? `SUM(C6:C${cn - 1})` : '0', kw), { fmt: NUM, font: { bold: true }, border: line });
+  put(ws0, 'D' + tn, fx(`SUM(D6:D${cn})`, totV), { fmt: EUR, font: { bold: true, size: 12, color: { argb: HEAD } }, border: line });
+  put(ws0, 'E' + tn, fx(`IF(C${tn}>0,D${tn}/C${tn},0)`, kw > 0 ? totV / kw : 0), { fmt: EUR, font: { bold: true }, border: line });
+  const sicT = totRefs.reduce((a, x) => a + x.sic, 0);
+  put(ws0, 'A' + (tn + 1), 'di cui costi della sicurezza (D.Lgs. 81/08 All. XV), esposti al valore di stima e non soggetti a ribasso', { font: { size: 9 } }); put(ws0, 'D' + (tn + 1), +sicT.toFixed(2), { fmt: EUR, font: { size: 9 } });
+  const notes = ['Il dettaglio di ogni sezione e delle opere comuni è nei fogli successivi.', 'Prezzi IVA esclusa. Le quantità derivano dal dimensionamento preliminare e saranno confermate dal progetto esecutivo.', 'Esclusi: quanto non espressamente indicato nei fogli di dettaglio.'];
+  notes.forEach((l, i) => put(ws0, 'A' + (tn + 3 + i), l, { font: { size: 9, italic: true } }));
+  ws0.pageSetup = { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  wb.views = [{ activeTab: 0 }];
+  return saveXlsx(wb, `offerta-FV_${s.name.replace(/[^\w-]+/g, '_').slice(0, 40)}_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Excel per il committente scaricato: solo prezzi, nessun costo né margine.');
+}
+
+window.PVExport = { exportXlsx, exportXlsxClient, site, setCommon: (o) => { Object.assign(site().common, o); update(); } };
 render();
 })();
 </script>
