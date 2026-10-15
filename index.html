@@ -226,7 +226,7 @@ table.grid tfoot tr.tot td.num{font-family:var(--f-mono);font-weight:500}
 .tabchip{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:7px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0;max-width:260px}
 .tabchip b{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .tabchip span{font-size:11.5px;color:var(--muted);font-family:var(--f-mono)}
-.tabchip.roof{border-left:4px solid var(--accent)} .tabchip.carport{border-left:4px solid var(--copper)}
+.tabchip.roof{border-left:4px solid var(--accent)} .tabchip.carport{border-left:4px solid var(--copper)} .tabchip.bess{border-left:4px solid var(--ok)}
 .tabchip.haserr span{color:var(--err)}
 .tabchip.on{background:var(--accent);border-color:var(--accent)} .tabchip.on b,.tabchip.on span{color:var(--accent-ink)}
 .addsec{display:flex;gap:6px;align-items:center;margin-left:auto}
@@ -704,7 +704,56 @@ function bessCalc(cfg, costH) {
 /* ============================================================
    CALCOLO
    ============================================================ */
+/* ============================================================
+   SEZIONE "BESS": accumulo autonomo, aggiunto al sito come un tetto o una pensilina
+   ============================================================ */
+function computeBess(S, opts) {
+  const SITE = !!(opts && opts.site);
+  const items = [], checks = [], ov = S.ov || {};
+  const disc = (S.disc_mat || 0) / 100;
+  const add = (cat, id, desc, qty, um, unit, opt = {}) => {
+    if (!(qty > 0)) return;
+    const u = (ov[id] !== undefined && ov[id] !== '' && !isNaN(+ov[id])) ? +ov[id] : unit;
+    items.push({ cat, id, desc, qty, defQty: qty, qEdited: false, um, unit: u, def: unit, mat: !!opt.mat, ref: opt.ref || '', edited: u !== unit, field: '', tot: qty * u * (opt.mat ? 1 - disc : 1) });
+  };
+  const chk = (lvl, title, detail, ref) => checks.push({ lvl, title, detail, ref: ref || '' });
+  const C = { INV: 'Inverter e accumulo', CAB: 'Cavi, connettori e vie cavi', QE: 'Quadri, protezioni e connessione', MON: 'Monitoraggio',
+    CIV: 'Opere civili e fondazioni', SIC: 'Costi della sicurezza (All. XV D.Lgs. 81/08)', CSP: 'Coordinamento sicurezza CSP/CSE', NOL: 'Noli e sollevamenti', MDO: 'Manodopera e trasferte', PRO: 'Progettazione, pratiche e connessione' };
+  const E = S.bs_kwh > 0 ? S.bs_kwh : 215;
+  const kWg = S.bs_kw > 0 ? S.bs_kw : Math.round(E * 0.5);
+  const conn = (opts && opts.conn) || (S.conn === 'auto' ? (kWg > 100 ? 'MT' : 'BT') : S.conn);
+  const B = bessCalc({ kwh: E, kw: S.bs_kw, fmt: S.bs_fmt, place: S.bs_place, l: S.bs_l, ems: S.bs_ems !== false, kgrp: S.k_group_ac, tamb: S.t_amb, ci: S.cable_index, conn }, S.cost_h);
+  for (const x of B.rows) add(C[x.k], x.id, x.desc, x.qty, x.um, x.u, x.opt);
+  for (const c of B.checks) chk(c[0], c[1], c[2], c[3]);
+  const d = { Pdc: 0, Pac: 0, Ninv: 0, Nmod: 0, Nstr: 0, I: { iac: 0, vac: 400, pac: 0, name: '—' }, C, conn, bess: B.d, isBess: true };
+  // scavi e cavidotti fino al locale tecnico o alla cabina
+  d.trenchM = S.trench_m > 0 ? S.trench_m : 0;
+  if (d.trenchM > 0) {
+    const P = PRICES, surf = S.trench_surf || 'asfalto';
+    add(C.CIV, 'trench', 'Scavo a sezione obbligata 0,4 × 0,8 m, cavidotto con 2 corrugati Ø125, nastro segnalatore, rinterro e conferimento eccedenze', d.trenchM, 'm', P.trench, { ref: 'CEI 11-17 · DPR 120/2017' });
+    add(C.CIV, 'pit', 'Pozzetti di ispezione con chiusino carrabile D400 (1 ogni 25 m e ai cambi di direzione)', Math.ceil(d.trenchM / 25) + 1, 'pz', P.pit);
+    if (surf === 'asfalto') add(C.CIV, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione bituminosa lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.asphalt);
+    else if (surf === 'cls') add(C.CIV, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione industriale in calcestruzzo lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.trench_cls);
+    if (S.trench_cross > 0) add(C.CIV, 'trench_x', 'Attraversamenti (sottoservizi, strade interne) con spingitubo o scavo a mano', S.trench_cross, 'cad', P.trench_x);
+  }
+  d.days = B.d.days; d.daysTot = B.d.days + (d.trenchM > 0 ? Math.ceil(d.trenchM / 60) : 0);
+  d.hTot = B.d.hours; d.months = Math.max(1, Math.ceil(d.daysTot / 21));
+  // area di lavoro: recinzione mobile di cantiere attorno a basamento, mezzi e stoccaggio
+  const area = B.d.n * (B.d.fmt === 'container' ? 26 : 4.5) + 60;
+  const fm = Math.round(4 * Math.sqrt(area));
+  add(C.SIC, 'fence', 'Recinzione mobile area di lavoro e sollevamento accumulo (pannelli su basi; montaggio, smontaggio, 1° mese)', fm, 'm', PRICES.fence, { ref: 'All. XV 4.1.1 lett. a · Piemonte 28.A05.E10.005' });
+  add(C.SIC, 'fence_nolo', 'Nolo recinzione, mesi successivi al primo', fm * (d.months - 1), 'm·mese', PRICES.fence_nolo, { ref: 'Piemonte 28.A05.E10.010' });
+  if (B.d.fmt === 'container' || B.d.n >= 4) add(C.SIC, 'crane_area', 'Delimitazione e segnaletica dell\'area di manovra dell\'autogru, movieri durante i sollevamenti', 1, 'a corpo', 450, { ref: 'All. XV 4.1.1 lett. a, b' });
+  let sumMat = 0, sumAll = 0;
+  for (const it of items) { if (it.mat) sumMat += it.tot; sumAll += it.tot; }
+  const byCat = {}; for (const it of items) byCat[it.cat] = (byCat[it.cat] || 0) + it.tot;
+  const transport = sumMat * (S.transport || 0) / 100, contingency = (sumAll + transport) * (S.contingency || 0) / 100, cost = sumAll + transport + contingency;
+  const price = cost * (1 + (S.markup || 0) / 100);
+  return { d, items, checks, byCat, tot: { sumMat, transport, contingency, cost, price, markup: S.markup, margin: price > 0 ? (price - cost) / price * 100 : 0, profit: price - cost, costWp: 0, priceWp: 0 } };
+}
+
 function compute(S, mode, opts) {
+  if (mode === 'bess') return computeBess(S, opts);
   const SITE = !!(opts && opts.site);   // in un sito: i costi comuni (connessione, pratiche, cantiere) li calcola computeSite
   const d = {}, items = [], checks = [];
   const ov = S.ov || {};
@@ -1493,9 +1542,12 @@ function computeSite(site) {
   const C0 = site.common;
   const secs = (site.sections || []).filter(x => x && x.state);
   // 1° passaggio: potenza AC complessiva per decidere la connessione
-  let pacPre = 0;
-  for (const x of secs) { try { pacPre += compute(mergeSec(C0, x), x.mode, { site: true }).d.Pac || 0; } catch (e) {} }
-  const conn = C0.conn === 'auto' ? (pacPre > 100 ? 'MT' : 'BT') : C0.conn;
+  let pacPre = 0, kwStore = 0, kwLV = 0;   // kwLV: accumulo collegato in BT (i container hanno trasformatore proprio)
+  for (const x of secs) { try { const r0 = compute(mergeSec(C0, x), x.mode, { site: true }); pacPre += r0.d.Pac || 0; kwStore += r0.d.bess ? r0.d.bess.kW : 0; if (r0.d.bess && r0.d.bess.fmt !== 'container') kwLV += r0.d.bess.kW; } catch (e) {} }
+  if (C0.bess_kwh > 0) { const k0 = C0.bess_kw > 0 ? C0.bess_kw : Math.round(C0.bess_kwh * 0.5); kwStore += k0; kwLV += k0; }
+  // la connessione si dimensiona sulla potenza maggiore tra FV e accumulo (con EMS che evita la somma in immissione)
+  const pacConn = Math.max(pacPre, kwStore);
+  const conn = C0.conn === 'auto' ? (pacConn > 100 ? 'MT' : 'BT') : C0.conn;
   // 2° passaggio con la connessione di sito
   const res = secs.map(x => {
     let r;
@@ -1506,6 +1558,7 @@ function computeSite(site) {
     }
     r.sec = x;
     r.direct = r.items.reduce((a, b) => a + b.tot, 0);
+    r.isBess = x.mode === 'bess';
     return r;
   });
   const sd = {
@@ -1515,7 +1568,7 @@ function computeSite(site) {
   for (const r of res) {
     sd.pdc += r.d.Pdc; sd.pac += r.d.Pac; sd.ninv += r.d.Ninv; sd.nmod += r.d.Nmod;
     sd.daysWork += r.d.days; sd.daysTot += r.d.daysTot;
-    sd.ib += r.d.Ninv * r.d.I.iac * (r.d.I.vac === 800 ? 0 : 1);
+    sd.ib += r.d.Ninv * r.d.I.iac * (r.d.I.vac === 800 ? 0 : 1) + (r.d.bess && r.d.bess.fmt !== 'container' ? r.d.bess.kW * 1000 / (Math.sqrt(3) * 400) : 0);
   }
   // ore comuni di sito (cabina/interfaccia, monitoraggio, coordinamento tra sezioni): si sommano alla durata del cantiere
   const hCommon = res.length ? (conn === 'MT' ? 24 : 0) + (C0.monitor ? 6 + 0.5 * sd.ninv : 0) + (res.length > 1 ? 8 : 0) : 0;
@@ -1542,10 +1595,11 @@ function computeSite(site) {
     items.push({ cat, id, desc, qty: q, defQty: qty, qEdited: hasQ && Math.abs(q - qty) > 1e-9, um, unit: u, def: unit, mat: !!opt.mat, ref: opt.ref || '', edited: u !== unit, field: '' });
   };
   const chk = (lvl, title, detail, ref) => checks.push({ lvl, title, detail, ref: ref || '', sec: 'Sito' });
-  const P = PRICES, K = SITE_CAT, Pac = sd.pac, kWp = sd.pdc;
+  const P = PRICES, K = SITE_CAT, kWp = sd.pdc, Pac = Math.max(sd.pac, kwStore);   // per connessione, protezioni e pratiche vale la potenza maggiore tra FV e accumulo
+  sd.pacConn = Pac; sd.kwStore = kwStore;
 
-  if (!res.length) chk('warn', 'Nessuna sezione', 'Aggiungi una sezione tetto o pensilina per iniziare.');
-  if (C0.conn === 'auto') chk('info', `Connessione di sito: ${conn}`, `Potenza AC complessiva ${fx(Pac, 1)} kW${conn === 'MT' ? ' oltre 100 kW' : ' fino a 100 kW'}. Se lo stabilimento ha già una cabina MT, impostala in Dati comuni.`, 'TICA ARERA');
+  if (!res.length) chk('warn', 'Nessuna sezione', 'Aggiungi un tetto, una pensilina o un accumulo per iniziare.');
+  if (C0.conn === 'auto') chk('info', `Connessione di sito: ${conn}`, `Potenza di riferimento ${fx(Pac, 1)} kW (${kwStore > sd.pac ? 'accumulo' : 'FV in AC'})${conn === 'MT' ? ', oltre 100 kW' : ', fino a 100 kW'}. Se lo stabilimento ha già una cabina MT, impostala in Dati comuni.`, 'TICA ARERA');
   if (conn === 'BT') {
     if (Pac > 100) chk('err', 'Potenza di sito oltre il limite BT', `${fx(Pac, 1)} kW > 100 kW: la connessione è di norma in MT.`, 'TICA ARERA · CEI 0-21');
     const icc = Pac <= 33 ? 10 : 15;
@@ -1562,14 +1616,24 @@ function computeSite(site) {
     const cciOn = C0.cci === 'si' || (C0.cci === 'auto' && Pac >= 100);
     if (cciOn) { add(K.QE, 'cci', 'Controllore Centrale d\'Impianto (CCI) con configurazione', 1, 'pz', P.cci, { ref: 'CEI 0-16 All. O' }); chk('info', 'CCI richiesto', `Potenza di sito ${fx(Pac, 0)} kW ≥ 100 kW in MT.`, 'CEI 0-16 All. O · del. ARERA 540/2021'); }
     add(K.QE, 'm2', 'Sistema di misura dell\'energia prodotta (M2) con TA', 1, 'a corpo', P.m2_mt);
+    // potenza che passa dal trasformatore BT/MT di stabilimento: FV e accumulo in BT (i container BESS hanno il proprio)
+    const lvKW = Math.max(sd.pac, kwLV); sd.lvKW = lvKW;
+    const kvaNeed = lvKW / 0.95;
     if (C0.new_trafo) {
-      const nT = Math.max(1, Math.ceil(Pac * 1.1 / 2000));
-      const kva = Pac * 1.1 / nT;
+      const nT = Math.max(1, Math.ceil(lvKW * 1.1 / 2000));
+      const kva = lvKW * 1.1 / nT;
       const t = TRAFO.find(r => r[0] >= kva) || TRAFO[TRAFO.length - 1];
       sd.trafo = { n: nT, kva: t[0] };
       add(K.QE, 'trafo', `Trasformatore MT/BT in resina ${t[0]} kVA (Ecodesign UE 2019/1783)`, nT, 'pz', t[1], { mat: true });
       add(K.QE, 'mt_cell', 'Scomparto MT di protezione trasformatore + collegamenti', nT, 'pz', P.mt_cell, { mat: true });
-    } else chk('info', 'Verifica capacità cabina', `Il trasformatore esistente deve assorbire ${fx(Pac, 0)} kW di immissione; controllare PG e regolamento di esercizio.`, 'CEI 0-16');
+    } else if (lvKW > 0) {
+      const tk = C0.trafo_kva > 0 ? C0.trafo_kva : 0;
+      if (!tk) chk('warn', 'Trasformatore esistente: potenza da verificare', `Dal trasformatore di cabina passano ${fx(lvKW, 0)} kW (${fx(kvaNeed, 0)} kVA) tra FV e accumulo in BT. Inserisci la potenza del trasformatore esistente nei Dati comuni: se è insufficiente va installato un trasformatore nuovo.`, 'CEI 0-16');
+      else if (kvaNeed > tk) chk('err', 'Serve un trasformatore nuovo', `${fx(kvaNeed, 0)} kVA richiesti contro ${fx(tk, 0)} kVA del trasformatore esistente: attiva "Nuovo trasformatore dedicato" (o la sostituzione) nei Dati comuni, altrimenti il costo è sottostimato.`, 'CEI 0-16 · CEI EN 60076');
+      else if (kvaNeed > 0.8 * tk) chk('warn', 'Trasformatore esistente al limite', `${fx(kvaNeed, 0)} kVA su ${fx(tk, 0)} kVA (${fx(kvaNeed / tk * 100, 0)}%). Con i carichi dello stabilimento e le temperature estive valutare un trasformatore nuovo o dedicato.`, 'CEI 0-16 · CEI EN 60076');
+      else chk('ok', 'Trasformatore esistente adeguato', `${fx(kvaNeed, 0)} kVA su ${fx(tk, 0)} kVA (${fx(kvaNeed / tk * 100, 0)}%). Controllare comunque PG e regolamento di esercizio.`, 'CEI 0-16');
+    }
+    if (kwStore > kwLV) chk('info', 'Container BESS con trasformazione propria', 'I container si collegano in MT con il loro skid di trasformazione: non caricano il trasformatore di stabilimento.', 'CEI 0-16');
   }
   if (C0.bess_kwh > 0) {
     const B = bessCalc({ kwh: C0.bess_kwh, kw: C0.bess_kw, fmt: C0.bess_fmt, place: C0.bess_place, l: C0.bess_l, site: true, conn }, C0.cost_h);
@@ -1580,7 +1644,7 @@ function computeSite(site) {
   // potenza di accumulo complessiva rispetto alla connessione
   const bessKW = res.reduce((a, r) => a + (r.d.bess ? r.d.bess.kW : 0), 0) + (sd.bess ? sd.bess.kW : 0);
   sd.bessKW = bessKW; sd.bessKWh = res.reduce((a, r) => a + (r.d.bess ? r.d.bess.E : 0), 0) + (sd.bess ? sd.bess.E : 0);
-  if (bessKW > 0) chk('info', `Accumulo complessivo ${fx(sd.bessKWh, 0)} kWh / ${fx(bessKW, 0)} kW`, `Se l'EMS non limita la scarica verso la rete, la potenza in immissione da richiedere può arrivare a ${fx(Pac + bessKW, 0)} kW (FV + accumulo)${conn === 'BT' && Pac + bessKW > 100 ? ': oltre i 100 kW della BT' : ''}. Con limitazione dell'immissione resta ${fx(Pac, 0)} kW.`, 'TICA · CEI 0-16/0-21');
+  if (bessKW > 0) chk('info', `Accumulo complessivo ${fx(sd.bessKWh, 0)} kWh / ${fx(bessKW, 0)} kW`, `Se l'EMS non limita la scarica verso la rete, la potenza in immissione da richiedere può arrivare a ${fx(sd.pac + bessKW, 0)} kW (FV + accumulo)${conn === 'BT' && sd.pac + bessKW > 100 ? ': oltre i 100 kW della BT' : ''}. Con limitazione dell'immissione resta ${fx(Pac, 0)} kW, la maggiore tra FV e accumulo.`, 'TICA · CEI 0-16/0-21');
   if (C0.monitor && sd.ninv > 0) {
     add(K.MON, 'logger', 'Datalogger di impianto (fino a 80 inverter)', Math.max(1, Math.ceil(sd.ninv / 80)), 'pz', P.logger, { mat: true });
     add(K.MON, 'meter', 'Power meter trifase con TA per gestione e controllo immissione', 1, 'pz', P.meter, { mat: true });
@@ -1610,12 +1674,12 @@ function computeSite(site) {
   }
   // progettazione e pratiche (una volta per sito)
   if ((C0.el_src || 'forfait') === 'forfait' && C0.prog_el) add(K.PRO, 'prog_el', 'Progetto elettrico esecutivo (DM 37/08, CEI 0-2) e as-built', 1, 'a corpo', Math.round(Math.max(2000, 6 * kWp)), { ref: 'DM 37/08 art. 5' });
-  if (C0.lightning_doc) add(K.PRO, 'lightning', 'Valutazione rischio fulminazione', 1, 'a corpo', P.lightning * Math.max(1, res.filter(r => r.sec.mode === 'roof').length || 1), { ref: 'CEI EN 62305-2' });
-  if (C0.vvf) add(K.PRO, 'vvf_doc', 'Valutazione/pratica prevenzione incendi FV', 1, 'a corpo', Math.round(1200 + 1 * kWp), { ref: 'DPR 151/2011 · Nota DCPREV 1324/2012' });
+  if (C0.lightning_doc && kWp > 0) add(K.PRO, 'lightning', 'Valutazione rischio fulminazione', 1, 'a corpo', P.lightning * Math.max(1, res.filter(r => r.sec.mode === 'roof').length || 1), { ref: 'CEI EN 62305-2' });
+  if (C0.vvf && kWp > 0) add(K.PRO, 'vvf_doc', 'Valutazione/pratica prevenzione incendi FV', 1, 'a corpo', Math.round(1200 + 1 * kWp), { ref: 'DPR 151/2011 · Nota DCPREV 1324/2012' });
   add(K.PRO, 'conn_doc', 'Pratiche di connessione (TICA, GAUDÌ, regolamento di esercizio, GSE)', 1, 'a corpo', conn === 'MT' ? 2500 : 1200, { ref: 'TICA · CEI 0-16/0-21' });
   add(K.PRO, 'tica', 'Corrispettivo per il preventivo di connessione (TICA)', 1, 'a corpo', tica(Pac), { ref: 'del. ARERA 99/08 All. A' });
   add(K.PRO, 'conn_cost', 'Corrispettivo di connessione (da preventivo del distributore)', C0.conn_cost > 0 ? 1 : 0, 'a corpo', C0.conn_cost);
-  if (Pac > 20) add(K.PRO, 'dogane', 'Licenza di officina elettrica (Agenzia Dogane)', 1, 'a corpo', P.dogane, { ref: 'D.Lgs. 504/1995' });
+  if (sd.pac > 20) add(K.PRO, 'dogane', 'Licenza di officina elettrica (Agenzia Dogane)', 1, 'a corpo', P.dogane, { ref: 'D.Lgs. 504/1995' });
   add(K.PRO, 'dico', 'Dichiarazione di conformità, verifiche SPI con cassetta prova relè', 1, 'a corpo', conn === 'MT' ? 1500 : 600, { ref: 'DM 37/08 · CEI 0-21/0-16' });
   if ((C0.el_src || 'forfait') === 'forfait' && C0.dl) add(K.PRO, 'dl', 'Direzione lavori', 1, 'a corpo', Math.round(Math.max(1000, 2 * kWp)));
   }
@@ -1720,8 +1784,13 @@ function computeSite(site) {
   const commonTot = items.reduce((a, b) => a + b.tot, 0);
   const shared = commonTot + transport + contingency;
   const k = cost > 0 ? price / cost : 1;
+  const dirAll = res.reduce((a, r) => a + r.direct, 0), dirB = res.filter(r => r.isBess).reduce((a, r) => a + r.direct, 0);
+  const nPV = res.filter(r => !r.isBess).length;
+  const pvShare = nPV ? 1 - (dirAll > 0 ? dirB / dirAll : 0) : 0;
   for (const r of res) {
-    const w = sd.pdc > 0 ? r.d.Pdc / sd.pdc : 1 / Math.max(res.length, 1);
+    // FV per kWp; le sezioni di accumulo per quota di costo diretto (non hanno kWp)
+    const w = r.isBess ? (dirAll > 0 ? r.direct / dirAll : 0) : (sd.pdc > 0 ? pvShare * r.d.Pdc / sd.pdc : (nPV ? pvShare / nPV : 0));
+    r.w = w;
     r.alloc = r.direct + shared * w;
     r.allocPrice = r.alloc * k;
   }
@@ -1739,7 +1808,7 @@ function computeSite(site) {
   return {
     sd, res, items, checks: allChecks, siteChecks: checks, byCat, allItems,
     tot: { sumMat, transport, contingency, commonTot, cost, price, markup, margin, profit: price - cost,
-      costKw: kWp > 0 ? cost / kWp : 0, priceKw: kWp > 0 ? price / kWp : 0, sic, coord: coordTot, sicPct: (sumAll - proTot - coordTot) > 0 ? sic / (sumAll - proTot - coordTot) * 100 : 0, works: sumAll - proTot - coordTot, ug: sd.ug, design, pratiche: proTot - design }
+      costKw: kWp > 0 ? cost / kWp : 0, priceKw: kWp > 0 ? price / kWp : 0, kwh: sd.bessKWh || 0, costKwh: sd.bessKWh > 0 ? cost / sd.bessKWh : 0, priceKwh: sd.bessKWh > 0 ? price / sd.bessKWh : 0, sic, coord: coordTot, sicPct: (sumAll - proTot - coordTot) > 0 ? sic / (sumAll - proTot - coordTot) * 100 : 0, works: sumAll - proTot - coordTot, ug: sd.ug, design, pratiche: proTot - design }
   };
 }
 
@@ -1757,7 +1826,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 // dati che valgono per tutto il sito (connessione, clima, squadra, pratiche, condizioni economiche)
 function commonDefault() {
   return {
-    conn: 'auto', new_trafo: false, cci: 'auto', vvf: true, monitor: true, bess_kwh: 0, bess_kw: 0, bess_fmt: 'auto', bess_place: 'outdoor', bess_l: 30, conn_cost: 0,
+    conn: 'auto', new_trafo: false, trafo_kva: 0, cci: 'auto', vvf: true, monitor: true, bess_kwh: 0, bess_kw: 0, bess_fmt: 'auto', bess_place: 'outdoor', bess_l: 30, conn_cost: 0,
     t_min: -15, t_max: 70, snow_zone: 'I-A', altitude: 345,
     team: 4, h_day: 8, cost_h: 30, carp_cost_h: 34, km: 30, eur_km: 0.5, trasf_pp: 0,
     prog_el: true, lightning_doc: true, dl: true,
@@ -1784,6 +1853,8 @@ function sectionStateDefault(mode) {
     mdo_mode: 'calc', h_mod: 0, h_dc: 0, h_ac: 0, h_qe: 0, h_test: 0, h_steel: 0,
     ov: {}, qov: {}
   };
+  if (mode === 'bess') return { bs_on: true, bs_kwh: 430, bs_kw: 0, bs_fmt: 'auto', bs_place: 'outdoor', bs_l: 30, bs_ems: true,
+    k_group_ac: 0.8, t_amb: 40, cable_index: 1.0, trench_m: 0, trench_surf: 'asfalto', trench_cross: 0, ov: {}, qov: {} };
   if (mode === 'roof') return Object.assign(base, {
     roof_type: 'grecata', roof_area: 2600, fill: 0, kwp_target: 300,
     roof_capacity: 25, ballast_kg: null, roof_work: 'nessuno', asb_m2: 0, asb_redo: 'sandwich', redo_m2: 0, asb_mon: true, sw_th: 60, redo_mode: 'param', redo_corpo: 0, guaina_rem: true, asb_test: true, sky_new_m2: 0,
@@ -1800,8 +1871,9 @@ function sectionStateDefault(mode) {
     ple: true, crane_days: 0, tele_days: 0, ple_days: 0, excav_days: 0
   });
 }
+const MODE_NAME = { roof: 'Tetto', carport: 'Pensilina', bess: 'Accumulo BESS' };
 function newSection(mode, name) {
-  return { id: uid(), mode, name: name || (mode === 'roof' ? 'Tetto' : 'Pensilina'), state: sectionStateDefault(mode) };
+  return { id: uid(), mode, name: name || MODE_NAME[mode], state: sectionStateDefault(mode) };
 }
 function newSite(name) {
   return { id: uid(), v: SCHEMA, name: name || 'Nuovo sito', location: '', client: '', notes: '', common: commonDefault(), sections: [], updated: Date.now() };
@@ -1822,19 +1894,25 @@ function normalizeSite(x) {
   if (xc.prog_source && !xc.el_src) { s.common.el_src = s.common.ed_src = s.common.sic_src = xc.prog_source; }   // migrazione dalla versione con scelta unica
   s.common.dmq_el = Object.assign({}, E.DM_DEF_EL, xc.dmq_el || {}); s.common.dmq_ed = Object.assign({}, E.DM_DEF_ED, xc.dmq_ed || {}); s.common.dmq_sic = Object.assign({}, E.DM_DEF_SIC, xc.dmq_sic || {});
   s.sections = ((x && x.sections) || []).filter(Boolean).map(sec => {
-    const mode = sec.mode === 'carport' ? 'carport' : 'roof';
+    const mode = sec.mode === 'carport' || sec.mode === 'bess' ? sec.mode : 'roof';
     const d = sectionStateDefault(mode); const st = sec.state || {};
     const o = Object.assign(d, st);
     if (mode === 'roof' && !st.roof_work) o.roof_work = st.asb_on ? 'amianto' : 'nessuno';   // migrazione dalla casella "bonifica amianto"
-    o.mod = Object.assign({}, d.mod, st.mod || {}); o.inv = Object.assign({}, d.inv, st.inv || {});
+    if (mode !== 'bess') { o.mod = Object.assign({}, d.mod, st.mod || {}); o.inv = Object.assign({}, d.inv, st.inv || {}); }
     // inverter scelto da elenco: dati elettrici sempre allineati al catalogo attuale; il prezzo resta quello inserito, salvo il vecchio default
     if (E.INV_PRESETS[o.inv_preset]) { const cur = E.INV_PRESETS[o.inv_preset], OLD = { i150: 6300 }; const keep = st.inv && st.inv.price != null && st.inv.price !== OLD[o.inv_preset] ? st.inv.price : cur.price; o.inv = Object.assign({}, cur, { price: keep }); } o.st = Object.assign({}, d.st, st.st || {}); o.ov = st.ov || {}; o.qov = st.qov || {};
-    return { id: sec.id || uid(), mode, name: sec.name || (mode === 'roof' ? 'Tetto' : 'Pensilina'), state: o };
+    return { id: sec.id || uid(), mode, name: sec.name || MODE_NAME[mode], state: o };
   });
+  // l'accumulo di sito dei Dati comuni diventa una sezione "Accumulo BESS"
+  if (xc.bess_kwh > 0) {
+    const b = newSection('bess', 'Accumulo BESS di sito');
+    Object.assign(b.state, { bs_kwh: xc.bess_kwh, bs_kw: xc.bess_kw || 0, bs_fmt: xc.bess_fmt || 'auto', bs_place: xc.bess_place || 'outdoor', bs_l: xc.bess_l || 30 });
+    s.sections.push(b); s.common.bess_kwh = 0;
+  }
   s.v = SCHEMA;
   return s;
 }
-const api = { SCHEMA, uid, commonDefault, sectionStateDefault, newSection, newSite, exampleSite, normalizeSite };
+const api = { MODE_NAME, SCHEMA, uid, commonDefault, sectionStateDefault, newSection, newSite, exampleSite, normalizeSite };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PVDefaults = api;
 })(this);
 </script>
@@ -1889,7 +1967,27 @@ function renderStatus() {
 const opts = (o) => Object.entries(o).map(([v, x]) => [v, typeof x === 'string' ? x : x.name]);
 const kitOf = (s) => ((E.ROOF_TYPES[s.roof_type] || {}).kit || '');
 
+const ML = { roof: 'Tetto', carport: 'Pensilina', bess: 'Accumulo' };
+const secLabel = (r) => r.sec.mode === 'bess' ? `Accumulo · ${nf(r.d.bess ? r.d.bess.E : 0)} kWh / ${nf(r.d.bess ? r.d.bess.kW : 0)} kW` : `${ML[r.sec.mode]} · ${nf(r.d.Nmod)} moduli · ${r.d.Ninv} × ${nf(r.d.I.pac)} kW`;
+const TRENCH_FIELDS = (R) => [
+  { k: 'trench_m', l: 'Lunghezza dello scavo', u: 'm', h: R ? 'Tratto interrato dalla calata dal tetto al locale tecnico. 0 = linee solo in aereo o in cunicolo.' : 'Fino al locale tecnico o alla cabina.' },
+  { k: 'trench_surf', l: 'Pavimentazione da ripristinare', t: 'sel', o: [['asfalto', 'Asfalto · 30 €/m²'], ['cls', 'Calcestruzzo industriale · 65 €/m²'], ['terreno', 'Terreno o verde (nessun ripristino)']], show: (s) => s.trench_m > 0 },
+  { k: 'trench_cross', l: 'Attraversamenti (sottoservizi, strade)', u: 'cad', show: (s) => s.trench_m > 0, h: 'Spingitubo o scavo a mano: 650 € cad. (stima).' }
+];
+function bessGroups() {
+  return [{
+    id: 'bess', title: 'Sistema di accumulo', sub: 'BESS C&I autonomo · connesso al punto di connessione del sito', open: true, fields: [
+      { k: 'bs_kwh', l: 'Capacità', u: 'kWh', step: 1, h: 'Cabinet da 215 kWh, container da 3,7 MWh: il prezzo si calcola sui kWh inseriti.' },
+      { k: 'bs_kw', l: 'Potenza', u: 'kW', auto: (r) => r.d && r.d.bess ? nf(r.d.bess.kWauto, 0) : '', h: 'Vuoto = 0,5 C (2 ore di scarica).' },
+      { k: 'bs_fmt', l: 'Formato', t: 'sel', o: [['auto', 'Automatico (cabinet fino a 2 MWh, poi container)'], ['cabinet', 'Cabinet outdoor 108 kW / 215 kWh'], ['container', 'Container 20\' da 3,7 MWh']] },
+      { k: 'bs_place', l: 'Posizione', t: 'sel', o: [['outdoor', 'All\'aperto su basamento in c.a.'], ['indoor', 'In locale dedicato (REI, ventilazione)']] },
+      { k: 'bs_l', l: 'Distanza dal quadro di connessione', u: 'm' },
+      { k: 'bs_ems', l: 'EMS e power meter al punto di connessione', t: 'chk' }
+    ]
+  }, { id: 'trench', title: 'Scavi e cavidotti di collegamento', sub: 'Dall\'accumulo al locale tecnico o alla cabina', fields: TRENCH_FIELDS(false) }];
+}
 function secGroups(mode) {
+  if (mode === 'bess') return bessGroups();
   const R = mode === 'roof';
   const g = [];
   g.push(R ? {
@@ -1932,11 +2030,7 @@ function secGroups(mode) {
     ]
   });
   g.push({
-    id: 'trench', title: 'Scavi e cavidotti di collegamento', sub: 'Dalla sezione al locale tecnico o alla cabina', fields: [
-      { k: 'trench_m', l: 'Lunghezza dello scavo', u: 'm', h: R ? 'Tratto interrato dalla calata dal tetto al locale tecnico. 0 = linee solo in aereo o in cunicolo.' : 'Dalla pensilina al locale tecnico o alla cabina.' },
-      { k: 'trench_surf', l: 'Pavimentazione da ripristinare', t: 'sel', o: [['asfalto', 'Asfalto · 30 €/m²'], ['cls', 'Calcestruzzo industriale · 65 €/m²'], ['terreno', 'Terreno o verde (nessun ripristino)']], show: (s) => s.trench_m > 0 },
-      { k: 'trench_cross', l: 'Attraversamenti (sottoservizi, strade)', u: 'cad', show: (s) => s.trench_m > 0, h: 'Spingitubo o scavo a mano: 650 € cad. (stima).' }
-    ]
+    id: 'trench', title: 'Scavi e cavidotti di collegamento', sub: 'Dalla sezione al locale tecnico o alla cabina', fields: TRENCH_FIELDS(R)
   });
   g.push(!R ? {
     id: 'site', title: 'Pensilina', sub: 'Geometria (neve e quota nei Dati comuni)', open: true, fields: [
@@ -2102,13 +2196,9 @@ const COMMON_GROUPS = [
     { k: 'conn', l: 'Connessione', t: 'sel', o: [['auto', 'Automatica sul totale di sito (BT fino a 100 kW, poi MT)'], ['BT', 'BT · CEI 0-21'], ['MT', 'MT · CEI 0-16 (cabina utente)']], wide: true },
     { k: 'cci', l: 'Controllore Centrale d\'Impianto', t: 'sel', o: [['auto', 'Automatico (≥ 100 kW in MT)'], ['si', 'Sì'], ['no', 'No']], show: (s) => s.conn !== 'BT' },
     { k: 'new_trafo', l: 'Nuovo trasformatore dedicato', t: 'chk', show: (s) => s.conn !== 'BT' },
+    { k: 'trafo_kva', l: 'Potenza trasformatore esistente', u: 'kVA', show: (s) => s.conn !== 'BT' && !s.new_trafo, h: 'Da targa. Serve a verificare se FV e accumulo in BT richiedono un trasformatore nuovo.' },
     { k: 'vvf', l: 'Sgancio di emergenza e pratica VVF', t: 'chk' },
     { k: 'monitor', l: 'Monitoraggio', t: 'chk' },
-    { k: 'bess_kwh', l: 'Accumulo di sito (unico, al punto di connessione)', u: 'kWh', h: 'In alternativa all\'accumulo per sezione (riquadro nelle sezioni). 0 = nessuno.' },
-    { k: 'bess_kw', l: 'Potenza accumulo di sito', u: 'kW', auto: (r) => r.sd && r.sd.bess ? nf(r.sd.bess.kWauto, 0) : '', show: (s) => s.bess_kwh > 0 },
-    { k: 'bess_fmt', l: 'Formato', t: 'sel', o: [['auto', 'Automatico (cabinet fino a 2 MWh)'], ['cabinet', 'Cabinet 108 kW / 215 kWh'], ['container', 'Container 20\' 3,7 MWh']], show: (s) => s.bess_kwh > 0 },
-    { k: 'bess_place', l: 'Posizione', t: 'sel', o: [['outdoor', 'All\'aperto su basamento'], ['indoor', 'In locale dedicato']], show: (s) => s.bess_kwh > 0 },
-    { k: 'bess_l', l: 'Distanza dal quadro di connessione', u: 'm', show: (s) => s.bess_kwh > 0 },
     { k: 'conn_cost', l: 'Corrispettivo di connessione', u: '€', h: 'Dal preventivo del distributore, se noto.' }
   ] },
   { id: 'mdo', title: 'Squadra e trasferte', sub: 'Stessa squadra per tutte le sezioni', fields: [
@@ -2261,9 +2351,9 @@ function renderHome() {
   let tk = 0, tc = 0, tp = 0;
   const rows = list.map(s => {
     const m = siteSummary(s); tk += m.kwp; tc += m.cost; tp += m.price;
-    const nR = s.sections.filter(x => x.mode === 'roof').length, nC = s.sections.length - nR;
+    const nR = s.sections.filter(x => x.mode === 'roof').length, nC = s.sections.filter(x => x.mode === 'carport').length, nB = s.sections.filter(x => x.mode === 'bess').length;
     return `<tr><td><button class="lnk" data-open="${s.id}">${esc(s.name)}</button>${m.err ? ' <span class="pill err">' + m.err + ' err.</span>' : ''}<small>${esc(s.client || '')}</small></td>
-      <td>${esc(s.location || '—')}</td><td>${nR ? nR + ' tetto' + (nR > 1 ? 'i' : '') : ''}${nR && nC ? ' · ' : ''}${nC ? nC + ' pensilin' + (nC > 1 ? 'e' : 'a') : ''}${!s.sections.length ? '—' : ''}</td>
+      <td>${esc(s.location || '—')}</td><td>${nR ? nR + ' tetto' + (nR > 1 ? 'i' : '') : ''}${nR && nC ? ' · ' : ''}${nC ? nC + ' pensilin' + (nC > 1 ? 'e' : 'a') : ''}${(nR || nC) && nB ? ' · ' : ''}${nB ? nB + ' BESS' : ''}${!s.sections.length ? '—' : ''}</td>
       <td class="num">${nf(m.kwp, 1)}</td><td>${m.conn}</td><td class="num">${eur(m.cost)}</td><td class="num">${eur(m.price)}</td><td class="num">${m.kwp > 0 ? nf(m.price / m.kwp, 0) : '—'}</td>
       <td class="muted">${fmtDate(s.updated)}</td>
       <td class="acts-cell"><button class="btn sm" data-open="${s.id}">Apri</button><button class="btn sm ghost" data-dup="${s.id}">Duplica</button><button class="btn sm ghost" data-del="${s.id}">Elimina</button></td></tr>`;
@@ -2285,15 +2375,15 @@ function renderSite() {
   else if (app.tab === 'recap') { FORM = null; form.innerHTML = ''; }
   else { const sec = curSec(); buildForm(form, secGroups(sec.mode), sec.id, () => (curSec() || {}).state, () => secRes(app.tab)); }
   $('#secBar').hidden = !curSec();
-  if (curSec()) { $('#secName').value = curSec().name; $('#secType').textContent = curSec().mode === 'roof' ? 'Tetto' : 'Pensilina'; }
+  if (curSec()) { $('#secName').value = curSec().name; $('#secType').textContent = ML[curSec().mode]; }
   update(true);
 }
 function renderTabs() {
   const s = site(); const R = app.R;
   const chip = (id, label, sub, cls) => `<button class="tabchip ${cls || ''}${app.tab === id ? ' on' : ''}" data-tab="${id}" type="button"><b>${esc(label)}</b>${sub ? `<span>${sub}</span>` : ''}</button>`;
-  const secChips = s.sections.map(x => { const r = R && R.res.find(y => y.sec.id === x.id); const err = r && r.checks.some(c => c.lvl === 'err'); return chip(x.id, x.name, `${x.mode === 'roof' ? 'Tetto' : 'Pensilina'} · ${nf(r ? r.d.Pdc : 0, 1)} kWp${err ? ' · errore' : ''}`, (x.mode === 'roof' ? 'roof' : 'carport') + (err ? ' haserr' : '')); }).join('');
-  $('#tabs').innerHTML = chip('recap', 'Riepilogo sito', `${nf(R ? R.sd.pdc : 0, 1)} kWp`) + chip('common', 'Dati comuni', R ? `${R.sd.conn} · squadra ${s.common.team}` : '') + secChips +
-    `<span class="addsec"><button class="btn sm" data-add="roof" type="button">+ Tetto</button><button class="btn sm" data-add="carport" type="button">+ Pensilina</button></span>`;
+  const secChips = s.sections.map(x => { const r = R && R.res.find(y => y.sec.id === x.id); const err = r && r.checks.some(c => c.lvl === 'err'); return chip(x.id, x.name, `${ML[x.mode]} · ${x.mode === 'bess' ? nf(r && r.d.bess ? r.d.bess.E : 0) + ' kWh' : nf(r ? r.d.Pdc : 0, 1) + ' kWp'}${err ? ' · errore' : ''}`, x.mode + (err ? ' haserr' : '')); }).join('');
+  $('#tabs').innerHTML = chip('recap', 'Riepilogo sito', R && !(R.sd.pdc > 0) && R.tot.kwh > 0 ? `${nf(R.tot.kwh)} kWh` : `${nf(R ? R.sd.pdc : 0, 1)} kWp${R && R.tot.kwh > 0 ? ` · ${nf(R.tot.kwh)} kWh` : ''}`) + chip('common', 'Dati comuni', R ? `${R.sd.conn} · squadra ${s.common.team}` : '') + secChips +
+    `<span class="addsec"><button class="btn sm" data-add="roof" type="button">+ Tetto</button><button class="btn sm" data-add="carport" type="button">+ Pensilina</button><button class="btn sm" data-add="bess" type="button">+ Accumulo BESS</button></span>`;
 }
 function update(fromRender) {
   const s = site(); if (!s) return;
@@ -2320,10 +2410,10 @@ function renderAside(R) {
   if (r) return renderSecAside(R, r);
   $('#catTitle').textContent = 'Costo del sito per categoria'; $('#costLabel').textContent = 'Costo di commessa';
   const { sd, tot } = R; const c = site().common;
-  const nR = R.res.filter(r => r.sec.mode === 'roof').length, nC = R.res.length - nR;
+  const nR = R.res.filter(r => r.sec.mode === 'roof').length, nC = R.res.filter(r => r.sec.mode === 'carport').length, nB = R.res.filter(r => r.sec.mode === 'bess').length;
   $('#kpis').innerHTML = [
-    ['Potenza DC sito', nf(sd.pdc, 1), 'kWp'],
-    ['Sezioni', String(R.res.length), `${nR} tett${nR === 1 ? 'o' : 'i'} · ${nC} pensilin${nC === 1 ? 'a' : 'e'}`],
+    sd.pdc > 0 || !(tot.kwh > 0) ? ['Potenza DC sito', nf(sd.pdc, 1), tot.kwh > 0 ? `kWp · accumulo ${nf(tot.kwh)} kWh` : 'kWp'] : ['Accumulo di sito', nf(tot.kwh), `kWh · ${nf(sd.kwStore || 0)} kW`],
+    ['Sezioni', String(R.res.length), `${nR} tett${nR === 1 ? 'o' : 'i'} · ${nC} pensilin${nC === 1 ? 'a' : 'e'}${nB ? ` · ${nB} BESS` : ''}`],
     ['Connessione', sd.conn, `${nf(sd.pac, 1)} kW AC${c.conn === 'auto' ? ' · auto' : ''}`],
     ['Inverter', String(sd.ninv), `${nf(sd.nmod)} moduli`]
   ].map(([l, v, u]) => `<div class="kpi"><span class="kl">${l}</span><span class="kv">${v}</span><span class="ku">${u}</span></div>`).join('');
@@ -2331,11 +2421,11 @@ function renderAside(R) {
   const max = Math.max(1, ...cats.map(k => R.byCat[k]));
   $('#cats').innerHTML = cats.map(k => `<li><span class="cn">${esc(k)}</span><span class="cv">${eur(R.byCat[k])}</span><span class="cp">${nf(R.byCat[k] / Math.max(tot.cost, 1) * 100, 1)}%</span><span class="cbar"><i style="width:${(R.byCat[k] / max * 100).toFixed(1)}%"></i></span></li>`).join('');
   $('#costTot').textContent = eur(tot.cost);
-  $('#costWp').textContent = nf(tot.costKw, 0) + ' €/kWp';
+  $('#costWp').textContent = sd.pdc > 0 || !(tot.kwh > 0) ? nf(tot.costKw, 0) + ' €/kWp' : nf(tot.costKwh, 0) + ' €/kWh';
   const mk = $('#markup'), pr = $('#price');
   if (document.activeElement !== mk) mk.value = (+tot.markup).toFixed(1);
   if (document.activeElement !== pr) pr.value = Math.round(tot.price);
-  $('#priceWp').textContent = nf(tot.priceKw, 0) + ' €/kWp';
+  $('#priceWp').textContent = sd.pdc > 0 || !(tot.kwh > 0) ? nf(tot.priceKw, 0) + ' €/kWp' : nf(tot.priceKwh, 0) + ' €/kWh';
   $('#margin').textContent = nf(tot.margin, 1) + '%';
   $('#profit').textContent = eur(tot.profit);
   $('#mode-note').textContent = c.price_mode === 'price' ? 'Prezzo imposto: il markup è ricalcolato' : 'Markup imposto: il prezzo è ricalcolato';
@@ -2345,40 +2435,47 @@ function renderAside(R) {
 
 function renderSecAside(R, r) {
   const d = r.d, sec = r.sec;
-  $('#kpis').innerHTML = [
+  const B = d.bess;
+  $('#kpis').innerHTML = (sec.mode === 'bess' && B ? [
+    ['Capacità accumulo', nf(B.E), 'kWh'],
+    ['Potenza', nf(B.kW), `kW · ${nf(B.C, 2)} C`],
+    ['Formato', `${B.n} × ${B.fmt === 'container' ? 'container' : 'cabinet'}`, `${nf(B.unit)} €/kWh sistema`],
+    ['Connessione di sito', R.sd.conn, `${nf(R.sd.pacConn || R.sd.pac, 1)} kW di riferimento`]
+  ] : [
     ['Potenza DC sezione', nf(d.Pdc, 1), 'kWp'],
     ['Moduli', nf(d.Nmod), `${d.Nstr || 0} stringhe × ${d.Ns || 0}`],
     ['Inverter', `${d.Ninv} × ${nf(d.I ? d.I.pac : 0)}`, 'kW'],
     ['Connessione di sito', R.sd.conn, `${nf(R.sd.pac, 1)} kW AC totali`]
-  ].map(([l, v, u]) => `<div class="kpi"><span class="kl">${l}</span><span class="kv">${v}</span><span class="ku">${u}</span></div>`).join('');
+  ]).map(([l, v, u]) => `<div class="kpi"><span class="kl">${l}</span><span class="kv">${v}</span><span class="ku">${u}</span></div>`).join('');
   const by = {}; for (const it of r.items) by[it.cat] = (by[it.cat] || 0) + it.tot;
   const cats = E.CAT_ORDER_ALL.filter(k => by[k] > 0.5); const max = Math.max(1, ...cats.map(k => by[k]));
   $('#catTitle').textContent = `Costi diretti · ${sec.name}`;
   $('#cats').innerHTML = cats.map(k => `<li><span class="cn">${esc(k)}</span><span class="cv">${eur(by[k])}</span><span class="cp">${nf(by[k] / Math.max(r.direct, 1) * 100, 1)}%</span><span class="cbar"><i style="width:${(by[k] / max * 100).toFixed(1)}%"></i></span></li>`).join('') || '<li class="muted">Nessun costo.</li>';
   $('#costLabel').textContent = 'Costo diretto sezione';
   $('#costTot').textContent = eur(r.direct);
-  $('#costWp').textContent = d.Pdc > 0 ? nf(r.direct / d.Pdc, 0) + ' €/kWp' : '';
+  $('#costWp').textContent = d.Pdc > 0 ? nf(r.direct / d.Pdc, 0) + ' €/kWp' : (B && B.E > 0 ? nf(r.direct / B.E, 0) + ' €/kWh' : '');
   const errs = r.checks.filter(x => x.lvl === 'err').length, warns = r.checks.filter(x => x.lvl === 'warn').length;
   $('#chkSum').innerHTML = (errs ? `<span class="pill err">${errs} ${errs > 1 ? 'errori' : 'errore'}</span>` : `<span class="pill ok">Valido</span>`) + (warns ? ` <span class="pill warn">${warns} avvis${warns > 1 ? 'i' : 'o'}</span>` : '');
-  const share = r.alloc - r.direct, kw = d.Pdc > 0 ? d.Pdc : 0;
+  const share = r.alloc - r.direct, kw = d.Pdc > 0 ? d.Pdc : 0, kwh = sec.mode === 'bess' && B ? B.E : 0;
+  const per = (v) => kw ? nf(v / kw, 0) + ' €/kWp' : kwh ? nf(v / kwh, 0) + ' €/kWh' : '—';
   $('#secCard').innerHTML = `<h2><span>Sezione con quota di sito</span></h2>
     <div class="row"><span>Costo diretto</span><b>${eur(r.direct)}</b></div>
     <div class="row"><span>Quota costi comuni, trasporto e imprevisti</span><b>${eur(share)}</b></div>
     <div class="row tot"><span>Costo della sezione</span><b>${eur(r.alloc)}</b></div>
-    <div class="row"><span></span><b>${kw ? nf(r.alloc / kw, 0) + ' €/kWp' : '—'}</b></div>
+    <div class="row"><span></span><b>${per(r.alloc)}</b></div>
     <div class="row tot"><span>Prezzo della sezione</span><b>${eur(r.allocPrice)}</b></div>
-    <div class="row"><span>markup di sito ${nf(R.tot.markup, 1)}%</span><b>${kw ? nf(r.allocPrice / kw, 0) + ' €/kWp' : '—'}</b></div>
-    <p class="note">La quota comune è ripartita in proporzione ai kWp. Markup, prezzo e totali del sito sono nel <button class="lnk" data-tab="recap" type="button" style="font-size:12px">Riepilogo sito</button>.</p>`;
+    <div class="row"><span>markup di sito ${nf(R.tot.markup, 1)}%</span><b>${per(r.allocPrice)}</b></div>
+    <p class="note">La quota comune è ripartita ${R.res.some(x => x.isBess) ? 'tra FV e accumulo in proporzione al costo diretto, poi tra le sezioni FV per kWp' : 'in proporzione ai kWp'}. Markup, prezzo e totali del sito sono nel <button class="lnk" data-tab="recap" type="button" style="font-size:12px">Riepilogo sito</button>.</p>`;
 }
 
 /* ---------- blocchi ---------- */
 function recapTableHTML(R) {
   const { tot } = R;
-  const rows = R.res.map(r => `<tr><td><button class="lnk" data-tab="${r.sec.id}">${esc(r.sec.name)}</button>${r.checks.some(c => c.lvl === 'err') ? ' <span class="pill err">errore</span>' : ''}<small>${r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'} · ${nf(r.d.Nmod)} moduli · ${r.d.Ninv} × ${nf(r.d.I.pac)} kW</small></td>
-    <td class="num">${nf(r.d.Pdc, 1)}</td><td class="num">${eur(r.direct)}</td><td class="num muted">${eur(r.alloc - r.direct)}</td><td class="num">${eur(r.alloc)}</td><td class="num">${r.d.Pdc > 0 ? nf(r.alloc / r.d.Pdc, 0) : '—'}</td><td class="num">${eur(r.allocPrice)}</td><td class="num">${r.d.Pdc > 0 ? nf(r.allocPrice / r.d.Pdc, 0) : '—'}</td></tr>`).join('');
-  return `<section class="blk"><div class="blkhead"><div><h2>Sezioni del sito</h2><p>Costo diretto di ogni sezione più la quota dei costi comuni ripartita per kWp: serve a confrontare tetto e pensilina.</p></div></div>
+  const rows = R.res.map(r => `<tr><td><button class="lnk" data-tab="${r.sec.id}">${esc(r.sec.name)}</button>${r.checks.some(c => c.lvl === 'err') ? ' <span class="pill err">errore</span>' : ''}<small>${secLabel(r)}</small></td>
+    <td class="num">${r.isBess ? '—' : nf(r.d.Pdc, 1)}</td><td class="num">${eur(r.direct)}</td><td class="num muted">${eur(r.alloc - r.direct)}</td><td class="num">${eur(r.alloc)}</td><td class="num">${r.d.Pdc > 0 ? nf(r.alloc / r.d.Pdc, 0) : r.isBess && r.d.bess ? nf(r.alloc / r.d.bess.E, 0) + '/kWh' : '—'}</td><td class="num">${eur(r.allocPrice)}</td><td class="num">${r.d.Pdc > 0 ? nf(r.allocPrice / r.d.Pdc, 0) : r.isBess && r.d.bess ? nf(r.allocPrice / r.d.bess.E, 0) + '/kWh' : '—'}</td></tr>`).join('');
+  return `<section class="blk"><div class="blkhead"><div><h2>Sezioni del sito</h2><p>Costo diretto di ogni sezione più la quota dei costi comuni (per kWp tra le sezioni FV; l\'accumulo in proporzione al costo diretto).</p></div></div>
   <div class="tablewrap"><table class="grid compact"><thead><tr><th>Sezione</th><th class="num">kWp</th><th class="num">Diretto</th><th class="num">Quota comune</th><th class="num">Costo</th><th class="num">€/kWp</th><th class="num">Prezzo</th><th class="num">€/kWp</th></tr></thead>
-  <tbody>${rows || '<tr><td colspan="8" class="empty">Nessuna sezione: aggiungi un tetto o una pensilina con i pulsanti in alto.</td></tr>'}</tbody>
+  <tbody>${rows || '<tr><td colspan="8" class="empty">Nessuna sezione: aggiungi un tetto, una pensilina o un accumulo con i pulsanti in alto.</td></tr>'}</tbody>
   <tfoot><tr><td colspan="2">Costi comuni di sito</td><td class="num">${eur(tot.commonTot)}</td><td colspan="5" class="muted">compresi nelle quote</td></tr>
   <tr><td colspan="2">Trasporto e imprevisti</td><td class="num">${eur(tot.transport + tot.contingency)}</td><td colspan="5" class="muted">compresi nelle quote</td></tr>
   <tr class="tot"><td>Totale sito</td><td class="num">${nf(R.sd.pdc, 1)}</td><td></td><td></td><td class="num">${eur(tot.cost)}</td><td class="num">${nf(tot.costKw, 0)}</td><td class="num">${eur(tot.price)}</td><td class="num">${nf(tot.priceKw, 0)}</td></tr></tfoot></table></div></section>`;
@@ -2395,6 +2492,13 @@ function checksBlock(list, withSec) {
   ${okL.length ? `<details class="okfold"><summary>${okL.length} verifiche superate</summary><ul class="checks">${okL.map(li).join('')}</ul></details>` : ''}</section>`;
 }
 function dimsBlock(r, S) {
+  if (r.sec && r.sec.mode === 'bess' && r.d.bess) {
+    const B = r.d.bess;
+    const rows = [['Capacità e potenza', `${nf(B.E)} kWh · ${nf(B.kW)} kW · ${nf(B.C, 2)} C`], ['Formato', `${B.n} × ${B.fmt === 'container' ? 'container 20\' da 3,7 MWh (collegamento in MT)' : 'cabinet 108 kW / 215 kWh (collegamento in BT)'}`],
+      ['Prezzo del sistema', `${nf(B.unit)} €/kWh (curva di mercato per taglia${B.C > 0.55 ? ', maggiorato per C-rate' : ''})`], B.fmt === 'container' ? ['Linea', 'MT verso la cabina utente'] : ['Linea accumulo', `${B.cab.n > 1 ? B.cab.n + '× ' : ''}FG16OR16 4×${B.cab.S} mm² · In ${B.cab.In} A · ΔV ${nf(B.cab.dv, 2)}%`],
+      ['Ore di posa', nf(B.hours) + ' h'], ['Durata stimata', `${r.d.daysTot} giorni`]];
+    return `<section class="blk"><div class="blkhead"><h2>Dimensionamento</h2><p>Valori calcolati</p></div><dl class="dims">${rows.map(([a, b]) => `<div><dt>${esc(a)}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl></section>`;
+  }
   if (r.failed) return '<section class="blk"><div class="blkhead"><h2>Dimensionamento</h2></div><p>Calcolo non disponibile.</p></section>';
   const d = r.d, I = d.I;
   const rows = [
@@ -2451,8 +2555,11 @@ function renderRecap(R) {
   $('#recap').innerHTML = [
     cell('us', 'Costo per noi · totale', eur(t.cost), `di cui costi comuni ${eur(t.commonTot)}, imprevisti ${eur(t.contingency)}, trasporto ${eur(t.transport)}`),
     cell('them', 'Prezzo al cliente · totale', eur(t.price), `markup ${nf(t.markup, 1)}% · margine ${nf(t.margin, 1)}% · utile ${eur(t.profit)}`),
-    cell('us', 'Costo per noi · per kW installato', nf(t.costKw, 0) + ' €/kWp', `${nf(kw, 1)} kWp installati`),
-    cell('them', 'Prezzo al cliente · per kW installato', nf(t.priceKw, 0) + ' €/kWp', `${nf(t.priceKw / 1000, 3)} €/Wp`),
+    ...(kw > 0 || !(t.kwh > 0) ? [
+      cell('us', 'Costo per noi · per kW installato', nf(t.costKw, 0) + ' €/kWp', `${nf(kw, 1)} kWp installati${t.kwh > 0 ? ` · accumulo ${nf(t.kwh)} kWh compreso` : ''}`),
+      cell('them', 'Prezzo al cliente · per kW installato', nf(t.priceKw, 0) + ' €/kWp', `${nf(t.priceKw / 1000, 3)} €/Wp`)] : [
+      cell('us', 'Costo per noi · per kWh di accumulo', nf(t.costKwh, 0) + ' €/kWh', `${nf(t.kwh)} kWh installati`),
+      cell('them', 'Prezzo al cliente · per kWh di accumulo', nf(t.priceKwh, 0) + ' €/kWh', `${nf(R.sd.kwStore || 0)} kW di potenza`)]),
     cell('us', 'Costi della sicurezza (All. XV) · costo per noi', eur(t.sic), `${nf(t.sicPct, 1)}% dei lavori · non soggetti a ribasso · coordinamento CSP/CSE a parte: ${eur(t.coord)}`),
     cell('us', 'Progettazione · costo per noi', eur(t.design), `${nf(t.design / Math.max(t.cost, 1) * 100, 1)}% del costo · pratiche e oneri di connessione a parte: ${eur(t.pratiche)}`)
   ].join('');
@@ -2509,7 +2616,7 @@ document.addEventListener('click', (e) => {
   if (t.id === 'btnNewSite') { const n = D.newSite('Nuovo sito ' + (app.sites.length + 1)); n.sections.push(D.newSection('roof', 'Tetto 1')); app.sites.push(n); app.siteId = n.id; touch(); toast('Sito creato: compila nome, località e sezioni'); return go('site', n.id, n.sections[0].id); }
   if (t.dataset.dup && !t.closest('#secBar')) { const src = app.sites.find(x => x.id === t.dataset.dup); if (!src) return; const c = clone(src); c.id = D.uid(); c.name = src.name + ' (copia)'; c.sections.forEach(x => x.id = D.uid()); c.updated = Date.now(); app.sites.push(c); saveNow(); renderHome(); toast('Sito duplicato'); return; }
   if (t.dataset.del && !t.closest('#secBar')) { if (!t.dataset.confirm) return armConfirm(t); app.sites = app.sites.filter(x => x.id !== t.dataset.del); if (app.siteId === t.dataset.del) app.siteId = null; saveNow(); renderHome(); toast('Sito eliminato'); return; }
-  if (t.dataset.add && s) { const n = s.sections.filter(x => x.mode === t.dataset.add).length + 1; const sec = D.newSection(t.dataset.add, (t.dataset.add === 'roof' ? 'Tetto ' : 'Pensilina ') + n); if (t.dataset.add === 'carport') sec.state.stalls = 40; else sec.state.kwp_target = 0; s.sections.push(sec); touch(); toast('Sezione aggiunta'); return go('site', s.id, sec.id); }
+  if (t.dataset.add && s) { const n = s.sections.filter(x => x.mode === t.dataset.add).length + 1; const sec = D.newSection(t.dataset.add, ({ roof: 'Tetto ', carport: 'Pensilina ', bess: 'Accumulo BESS ' })[t.dataset.add] + n); if (t.dataset.add === 'carport') sec.state.stalls = 40; else if (t.dataset.add === 'roof') sec.state.kwp_target = 0; s.sections.push(sec); touch(); toast('Sezione aggiunta'); return go('site', s.id, sec.id); }
   if (t.id === 'secDup' && s && curSec()) { const c = clone(curSec()); c.id = D.uid(); c.name = curSec().name + ' (copia)'; const i = s.sections.indexOf(curSec()); s.sections.splice(i + 1, 0, c); touch(); toast('Sezione duplicata'); return go('site', s.id, c.id); }
   if (t.id === 'secDel' && s && curSec()) { if (!t.dataset.confirm) return armConfirm(t); s.sections = s.sections.filter(x => x.id !== app.tab); touch(); toast('Sezione eliminata'); return go('site', s.id, 'recap'); }
   if ((t.id === 'secLeft' || t.id === 'secRight') && s && curSec()) { const i = s.sections.indexOf(curSec()); const j = t.id === 'secLeft' ? i - 1 : i + 1; if (j < 0 || j >= s.sections.length) return; [s.sections[i], s.sections[j]] = [s.sections[j], s.sections[i]]; touch(); renderTabs(); return; }
@@ -2544,15 +2651,15 @@ function printFees(R) {
 function printSite(full) {
   const s = site(); if (!s) return; const R = E.computeSite(s); const t = R.tot; const C = s.common;
   const today = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
-  const kw = R.sd.pdc, pk = (v) => kw > 0 ? nf(v / kw, 0) + ' €/kWp' : '—';
+  const kw = R.sd.pdc, kwh = R.tot.kwh || 0, pk = (v) => kw > 0 ? nf(v / kw, 0) + ' €/kWp' : kwh > 0 ? nf(v / kwh, 0) + ' €/kWh' : '—';
   const errs = R.checks.filter(c => c.lvl === 'err'), warns = R.checks.filter(c => c.lvl === 'warn');
   const mini = (l, v, n, cls) => `<div class="${cls || ''}"><span class="l">${l}</span><span class="v">${v}</span>${n ? `<span class="n">${n}</span>` : ''}</div>`;
-  let h = `<div class="pr-head"><div><div class="pr-kick">Stima di costo · impianto fotovoltaico</div><h1>${esc(s.name)}</h1><div>${esc(s.location || '')}${s.client ? ' · Cliente: ' + esc(s.client) : ''}</div></div>
+  let h = `<div class="pr-head"><div><div class="pr-kick">Stima di costo · ${kw > 0 && kwh > 0 ? 'impianto fotovoltaico e accumulo' : kw > 0 ? 'impianto fotovoltaico' : 'sistema di accumulo'}</div><h1>${esc(s.name)}</h1><div>${esc(s.location || '')}${s.client ? ' · Cliente: ' + esc(s.client) : ''}</div></div>
     <div class="meta">${today}<br>Documento interno<br>IVA esclusa</div></div>
-    <p class="pr-sub">${nf(kw, 1)} kWp DC · ${nf(R.sd.pac, 1)} kW AC · connessione ${R.sd.conn}${C.conn === 'auto' ? ' (automatica)' : ''} · ${R.res.length} sezion${R.res.length === 1 ? 'e' : 'i'} · ${nf(R.sd.nmod)} moduli · ${R.sd.ninv} inverter · durata stimata ${R.sd.daysTot} giorni lavorativi${t.ug ? ` · ${t.ug} uomini-giorno` : ''}</p>
+    <p class="pr-sub">${kw > 0 ? `${nf(kw, 1)} kWp DC · ${nf(R.sd.pac, 1)} kW AC · ` : ''}${kwh > 0 ? `accumulo ${nf(kwh)} kWh / ${nf(R.sd.kwStore || 0)} kW · ` : ''}connessione ${R.sd.conn}${C.conn === 'auto' ? ' (automatica)' : ''} · ${R.res.length} sezion${R.res.length === 1 ? 'e' : 'i'} · ${kw > 0 ? `${nf(R.sd.nmod)} moduli · ${R.sd.ninv} inverter · ` : ''}durata stimata ${R.sd.daysTot} giorni lavorativi${t.ug ? ` · ${t.ug} uomini-giorno` : ''}</p>
     <div class="pr-hero">
       <div class="us"><span class="l">Costo per noi</span><span class="v">${eur(t.cost)}</span><span class="k">${pk(t.cost)}</span><span class="n">costi comuni ${eur(t.commonTot)} · trasporto ${eur(t.transport)} · imprevisti ${eur(t.contingency)}</span></div>
-      <div class="them"><span class="l">Prezzo al cliente</span><span class="v">${eur(t.price)}</span><span class="k">${pk(t.price)} · ${nf(t.priceKw / 1000, 3)} €/Wp</span><span class="n">markup ${nf(t.markup, 1)}% · margine ${nf(t.margin, 1)}% · utile ${eur(t.profit)}</span></div>
+      <div class="them"><span class="l">Prezzo al cliente</span><span class="v">${eur(t.price)}</span><span class="k">${pk(t.price)}${kw > 0 ? ` · ${nf(t.priceKw / 1000, 3)} €/Wp` : ""}</span><span class="n">markup ${nf(t.markup, 1)}% · margine ${nf(t.margin, 1)}% · utile ${eur(t.profit)}</span></div>
     </div>
     <div class="pr-mini">
       ${mini('Costi della sicurezza (All. XV)', eur(t.sic), `${nf(t.sicPct, 1)}% dei lavori · non soggetti a ribasso`, 'sic')}
@@ -2562,7 +2669,7 @@ function printSite(full) {
     </div>`;
   if (errs.length || warns.length) h += `<div class="pr-warn"><b>Verifiche aperte:</b> ${[...errs, ...warns].map(c => `${c.sec ? esc(c.sec) + ' – ' : ''}${esc(c.title)}`).join(' · ')}</div>`;
   h += `<h2>Sezioni del sito</h2><table class="pr-t"><thead><tr><th>Sezione</th><th class="n">kWp</th><th class="n">Moduli</th><th>Inverter</th><th class="n">Diretto</th><th class="n">Quota comune</th><th class="n c-us">Costo</th><th class="n c-us">€/kWp</th><th class="n c-them">Prezzo</th><th class="n c-them">€/kWp</th></tr></thead><tbody>` +
-    R.res.map(r => `<tr><td><b>${esc(r.sec.name)}</b><small>${r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'}</small></td><td class="n">${nf(r.d.Pdc, 1)}</td><td class="n">${nf(r.d.Nmod)}</td><td>${r.d.Ninv} × ${nf(r.d.I.pac)} kW</td><td class="n">${eur(r.direct)}</td><td class="n mu">${eur(r.alloc - r.direct)}</td><td class="n c-us">${eur(r.alloc)}</td><td class="n c-us">${r.d.Pdc > 0 ? nf(r.alloc / r.d.Pdc, 0) : '—'}</td><td class="n c-them">${eur(r.allocPrice)}</td><td class="n c-them">${r.d.Pdc > 0 ? nf(r.allocPrice / r.d.Pdc, 0) : '—'}</td></tr>`).join('') +
+    R.res.map(r => `<tr><td><b>${esc(r.sec.name)}</b><small>${ML[r.sec.mode]}</small></td><td class="n">${r.isBess ? '—' : nf(r.d.Pdc, 1)}</td><td class="n">${r.isBess ? '—' : nf(r.d.Nmod)}</td><td>${r.isBess && r.d.bess ? nf(r.d.bess.E) + ' kWh / ' + nf(r.d.bess.kW) + ' kW' : r.d.Ninv + ' × ' + nf(r.d.I.pac) + ' kW'}</td><td class="n">${eur(r.direct)}</td><td class="n mu">${eur(r.alloc - r.direct)}</td><td class="n c-us">${eur(r.alloc)}</td><td class="n c-us">${r.d.Pdc > 0 ? nf(r.alloc / r.d.Pdc, 0) : '—'}</td><td class="n c-them">${eur(r.allocPrice)}</td><td class="n c-them">${r.d.Pdc > 0 ? nf(r.allocPrice / r.d.Pdc, 0) : '—'}</td></tr>`).join('') +
     `<tr class="t"><td>Totale sito</td><td class="n">${nf(kw, 1)}</td><td class="n">${nf(R.sd.nmod)}</td><td>${R.sd.ninv} inverter</td><td class="n">${eur(R.res.reduce((a, r) => a + r.direct, 0))}</td><td class="n">${eur(t.commonTot + t.transport + t.contingency)}</td><td class="n c-us">${eur(t.cost)}</td><td class="n c-us">${nf(t.costKw, 0)}</td><td class="n c-them">${eur(t.price)}</td><td class="n c-them">${nf(t.priceKw, 0)}</td></tr></tbody></table>`;
   const cats = [...E.CAT_ORDER_ALL, 'Trasporto materiali', 'Imprevisti'].filter(k => R.byCat[k] > 0.5);
   const cmax = Math.max(1, ...cats.map(k => R.byCat[k]));
@@ -2582,7 +2689,7 @@ function printSite(full) {
     <tr><td>Neve (pensiline)</td><td>zona ${esc(C.snow_zone)} · ${C.altitude} m s.l.m.</td><td>Distanza cantiere</td><td>${C.km} km</td></tr>
     <tr><td>Progettazione e DL</td><td colspan="3">${['el', 'ed', 'sic'].map(k => { const src = { el: C.el_src, ed: C.ed_src, sic: C.sic_src }[k]; const nm = { el: 'elettrico', ed: 'edile/strutturale', sic: 'sicurezza' }[k]; const F = R.sd.fees && R.sd.fees[k]; return `${nm}: ${src === 'dm' ? 'DM parametri' + (F ? ' ' + eur(F.net * R.sd.fees.kS) : '') : src === 'interna' ? 'interna' : 'forfait'}`; }).join(' · ')}${R.sd.fees && R.sd.fees.total ? ` · V impianti ${eur(R.sd.fees.V.imp)} (${esc(C.dm_cat_imp)}), strutture ${eur(R.sd.fees.V.str)} (${esc(C.dm_cat_str)}), edilizia ${eur(R.sd.fees.V.edi)} (${esc(C.dm_cat_edi)})` : ''}</td></tr>
     <tr><td>Trasporto / imprevisti</td><td>${nf(C.transport, 1)}% / ${nf(C.contingency, 1)}%</td><td>Sconto materiali</td><td>${nf(C.disc_mat, 1)}%</td></tr>
-    ${R.res.map(r => `<tr><td>${esc(r.sec.name)}</td><td colspan="3">${esc(r.sec.state.mod ? r.sec.state.mod.name : '')} · ${r.sec.mode === 'roof' ? esc((E.ROOF_TYPES[r.sec.state.roof_type] || {}).name || '') : `${r.d.stalls || 0} stalli`} · struttura ${r.sec.state.st && r.sec.state.st.mode === 'budget' ? 'a budget' : 'scomposta'}${r.d.Ns ? ` · stringhe ${r.d.Nstr} × ${r.d.Ns}` : ''}</td></tr>`).join('')}
+    ${R.res.map(r => r.isBess && r.d.bess ? `<tr><td>${esc(r.sec.name)}</td><td colspan="3">Accumulo LFP ${nf(r.d.bess.E)} kWh / ${nf(r.d.bess.kW)} kW · ${r.d.bess.n} × ${r.d.bess.fmt === 'container' ? 'container' : 'cabinet'} · ${r.sec.state.bs_place === 'indoor' ? 'in locale dedicato' : 'all\'aperto su basamento'} · ${nf(r.d.bess.unit)} €/kWh sistema</td></tr>` : `<tr><td>${esc(r.sec.name)}</td><td colspan="3">${esc(r.sec.state.mod ? r.sec.state.mod.name : '')} · ${r.sec.mode === 'roof' ? esc((E.ROOF_TYPES[r.sec.state.roof_type] || {}).name || '') : `${r.d.stalls || 0} stalli`} · struttura ${r.sec.state.st && r.sec.state.st.mode === 'budget' ? 'a budget' : 'scomposta'}${r.d.Ns ? ` · stringhe ${r.d.Nstr} × ${r.d.Ns}` : ''}</td></tr>`).join('')}
   </tbody></table>`;
   if (s.notes) h += `<h2>Note</h2><div class="pr-notes">${esc(s.notes)}</div>`;
   if (full) {
@@ -2618,7 +2725,7 @@ function recapTSV(R) {
   const s = site(); const t = R.tot;
   const L = [['Sito', s.name], ['Località', s.location || ''], ['kWp installati', nf(R.sd.pdc, 2)], ['Connessione', R.sd.conn], [],
     ['Sezione', 'Tipo', 'kWp', 'Costo diretto', 'Quota comune', 'Costo', 'Prezzo']];
-  for (const r of R.res) L.push([r.sec.name, r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina', nf(r.d.Pdc, 2), nf(r.direct, 2), nf(r.alloc - r.direct, 2), nf(r.alloc, 2), nf(r.allocPrice, 2)]);
+  for (const r of R.res) L.push([r.sec.name, ML[r.sec.mode], nf(r.d.Pdc, 2), nf(r.direct, 2), nf(r.alloc - r.direct, 2), nf(r.alloc, 2), nf(r.allocPrice, 2)]);
   L.push([], ['Costo per noi totale', nf(t.cost, 2)], ['Prezzo al cliente totale', nf(t.price, 2)], ['Costo per noi €/kWp', nf(t.costKw, 2)], ['Prezzo al cliente €/kWp', nf(t.priceKw, 2)], ['Costi della sicurezza (All. XV)', nf(t.sic, 2)], ['Coordinamento sicurezza CSP/CSE', nf(t.coord, 2)], ['Progettazione', nf(t.design, 2)], ['Pratiche e connessione', nf(t.pratiche, 2)], ['Markup %', nf(t.markup, 2)], ['Margine %', nf(t.margin, 2)]);
   return L.map(r => r.join('\t')).join('\n');
 }
@@ -2682,10 +2789,10 @@ async function exportXlsx() {
   const wr = wb.addWorksheet('Riepilogo');
   /* ---------- Computo ---------- */
   const wc = wb.addWorksheet('Computo', { views: [{ state: 'frozen', ySplit: 4 }] });
-  wc.columns = [{ width: 24 }, { width: 30 }, { width: 13 }, { width: 62 }, { width: 28 }, { width: 10 }, { width: 9 }, { width: 13 }, { width: 9 }, { width: 9 }, { width: 14 }, { width: 11 }];
+  wc.columns = [{ width: 24 }, { width: 30 }, { width: 13 }, { width: 62 }, { width: 28 }, { width: 10 }, { width: 9 }, { width: 13 }, { width: 9 }, { width: 9 }, { width: 14 }, { width: 11 }, { width: 8 }];
   put(wc, 'A1', `Computo · ${s.name}`, { font: { bold: true, size: 14, color: { argb: HEAD } } });
   put(wc, 'A2', 'Celle gialle con testo blu = modificabili (quantità e prezzi unitari). Il totale di riga e tutti i riepiloghi si ricalcolano. Le quantità automatiche non si ridimensionano da sole: vedi foglio Note.', { font: { italic: true, size: 9 } });
-  hdr(wc, 4, ['Sezione', 'Categoria', 'Codice', 'Voce', 'Riferimento', 'Q.tà', 'U.M.', 'Prezzo unit.', 'Materiale', 'Classe DM', 'Totale', 'Progett./DL']);
+  hdr(wc, 4, ['Sezione', 'Categoria', 'Codice', 'Voce', 'Riferimento', 'Q.tà', 'U.M.', 'Prezzo unit.', 'Materiale', 'Classe DM', 'Totale', 'Progett./DL', 'N. sez.']);
   const rows = [];
   R.res.forEach((r, si) => { for (const it of r.items) rows.push({ sec: r.sec.name, mode: r.sec.mode, it, site: false, si }); });
   const commons = R.items.filter(i => i.id !== 'coord'), coordIt = R.items.find(i => i.id === 'coord');
@@ -2711,11 +2818,12 @@ async function exportXlsx() {
     put(wc, 'J' + n, E.dmClass(it, x.mode, x.site), { al: { horizontal: 'center' }, font: { size: 9 } });
     put(wc, 'K' + n, fx(`F${n}*H${n}*IF(I${n}="Sì",1-Riepilogo!$C$6,1)`, it.tot), { fmt: EUR });
     put(wc, 'L' + n, E.DESIGN_IDS.includes(it.id) ? 'Sì' : '', { al: { horizontal: 'center' } });
+    put(wc, 'M' + n, x.site ? 0 : x.si + 1, { al: { horizontal: 'center' }, font: { size: 9, color: { argb: 'FF5A6764' } } });
   });
   const rT = rN + 1;
   put(wc, 'D' + rT, 'Totale voci del computo', { font: { bold: true }, border: line });
   put(wc, 'K' + rT, fx(`SUM(K${r0}:K${rN})`, R.allItems.reduce((a, b) => a + b.tot, 0)), { fmt: EUR, font: { bold: true }, border: line });
-  wc.autoFilter = { from: 'A4', to: 'L' + rN };
+  wc.autoFilter = { from: 'A4', to: 'M' + rN };
 
   /* ---------- Compensi DM ---------- */
   if (hasFees) {
@@ -2805,16 +2913,18 @@ async function exportXlsx() {
   const cRow = secN + 1;
   R.res.forEach((r, i) => {
     const n = sec0 + i;
-    put(wr, 'A' + n, r.sec.name); put(wr, 'B' + n, r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'); put(wr, 'C' + n, +r.d.Pdc.toFixed(2), { fmt: NUM, note: 'Potenza calcolata dallo strumento.' });
-    put(wr, 'D' + n, fx(`SUMIFS(${RNG('K')},${RNG('A')},A${n})`, r.direct), { fmt: EUR });
-    put(wr, 'E' + n, fx(`IF($C$11>0,($D$${cRow}+$C$16+$C$17)*C${n}/$C$11,0)`, r.alloc - r.direct), { fmt: EUR });
+    put(wr, 'A' + n, r.sec.name); put(wr, 'B' + n, r.isBess ? 'BESS' : r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'); put(wr, 'C' + n, +r.d.Pdc.toFixed(2), { fmt: NUM, note: r.isBess ? `Accumulo ${Math.round(r.d.bess ? r.d.bess.E : 0)} kWh: nessuna potenza FV.` : 'Potenza calcolata dallo strumento.' });
+    put(wr, 'D' + n, fx(`SUMIFS(${RNG('K')},${RNG('M')},${i + 1})`, r.direct), { fmt: EUR, note: i === 0 ? 'Somma delle voci del Computo con lo stesso numero di sezione (colonna M).' : undefined });
+    const DR = `$D$${sec0}:$D$${secN}`, BR = `$B$${sec0}:$B$${secN}`, CR = `$C$${sec0}:$C$${secN}`;
+    const wF = r.isBess ? `IF(SUM(${DR})>0,D${n}/SUM(${DR}),0)` : `IF(SUMIF(${BR},"<>BESS",${CR})>0,(1-IF(SUM(${DR})>0,SUMIF(${BR},"BESS",${DR})/SUM(${DR}),0))*C${n}/SUMIF(${BR},"<>BESS",${CR}),0)`;
+    put(wr, 'E' + n, fx(`($D$${cRow}+$C$16+$C$17)*${wF}`, r.alloc - r.direct), { fmt: EUR, note: i === 0 ? 'Quota comune: sezioni FV per kWp; accumulo in proporzione al costo diretto.' : undefined });
     put(wr, 'F' + n, fx(`D${n}+E${n}`, r.alloc), { fmt: EUR, font: { color: { argb: COP } } });
     put(wr, 'G' + n, fx(`IF(C${n}>0,F${n}/C${n},0)`, r.d.Pdc > 0 ? r.alloc / r.d.Pdc : 0), { fmt: EUR, font: { color: { argb: COP } } });
     put(wr, 'H' + n, fx(`F${n}*(1+$C$9)`, r.allocPrice), { fmt: EUR, font: { color: { argb: HEAD } } });
     put(wr, 'I' + n, fx(`IF(C${n}>0,H${n}/C${n},0)`, r.d.Pdc > 0 ? r.allocPrice / r.d.Pdc : 0), { fmt: EUR, font: { color: { argb: HEAD } } });
   });
   put(wr, 'A' + cRow, 'Costi comuni di sito (ripartiti per kWp)', { font: { italic: true } });
-  put(wr, 'D' + cRow, fx(`SUMIFS(${RNG('K')},${RNG('A')},"Costi comuni di sito")`, t.commonTot), { fmt: EUR, font: { italic: true } });
+  put(wr, 'D' + cRow, fx(`SUMIFS(${RNG('K')},${RNG('M')},0)`, t.commonTot), { fmt: EUR, font: { italic: true } });
   const tRow = cRow + 1;
   put(wr, 'A' + tRow, 'Totale sito', { font: { bold: true }, border: line });
   put(wr, 'C' + tRow, fx('C11', kw), { fmt: NUM, font: { bold: true }, border: line });
@@ -2848,7 +2958,7 @@ async function exportXlsx() {
     const ws = wb.addWorksheet(sheetName(r.sec.name)); const d = r.d, sr = sec0 + si;
     ws.columns = [{ width: 30 }, { width: 62 }, { width: 10 }, { width: 9 }, { width: 13 }, { width: 14 }, { width: 11 }];
     put(ws, 'A1', r.sec.name, { font: { bold: true, size: 14, color: { argb: HEAD } } });
-    put(ws, 'A2', `${r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'} · ${nf(d.Pdc, 1)} kWp · ${nf(d.Nmod)} moduli ${r.sec.state.mod ? r.sec.state.mod.name : ''} · ${d.Ninv} × ${d.I ? d.I.name : ''}${d.Ns ? ` · stringhe ${d.Nstr} × ${d.Ns}` : ''} · durata ${d.daysTot} giorni`, { font: { size: 9 } });
+    put(ws, 'A2', r.isBess && d.bess ? `Accumulo BESS · ${nf(d.bess.E)} kWh / ${nf(d.bess.kW)} kW · ${d.bess.n} × ${d.bess.fmt === 'container' ? 'container' : 'cabinet'} · durata ${d.daysTot} giorni` : `${r.sec.mode === 'roof' ? 'Tetto' : 'Pensilina'} · ${nf(d.Pdc, 1)} kWp · ${nf(d.Nmod)} moduli ${r.sec.state.mod ? r.sec.state.mod.name : ''} · ${d.Ninv} × ${d.I ? d.I.name : ''}${d.Ns ? ` · stringhe ${d.Nstr} × ${d.Ns}` : ''} · durata ${d.daysTot} giorni`, { font: { size: 9 } });
     put(ws, 'A3', 'Valori collegati al foglio Computo: quantità e prezzi si modificano lì e questo foglio si aggiorna.', { font: { italic: true, size: 9 } });
     hdr(ws, 5, ['Categoria', 'Voce', 'Q.tà', 'U.M.', 'Prezzo unit.', 'Totale', '% sezione']);
     let n = 6; const first = 6;
@@ -2867,9 +2977,9 @@ async function exportXlsx() {
       ['Costo diretto della sezione', `SUM(F${first}:F${last})`, r.direct, EUR, true],
       ['Quota costi comuni, trasporto e imprevisti (ripartita per kWp)', `Riepilogo!E${sr}`, r.alloc - r.direct, EUR],
       ['COSTO DELLA SEZIONE', `Riepilogo!F${sr}`, r.alloc, EUR, true, COP],
-      ['  costo €/kWp', `Riepilogo!G${sr}`, d.Pdc > 0 ? r.alloc / d.Pdc : 0, EUR, false, COP],
+      r.isBess && d.bess ? ['  costo €/kWh di accumulo', `Riepilogo!F${sr}/${Math.round(d.bess.E)}`, r.alloc / d.bess.E, EUR, false, COP] : ['  costo €/kWp', `Riepilogo!G${sr}`, d.Pdc > 0 ? r.alloc / d.Pdc : 0, EUR, false, COP],
       ['PREZZO DELLA SEZIONE', `Riepilogo!H${sr}`, r.allocPrice, EUR, true, HEAD],
-      ['  prezzo €/kWp', `Riepilogo!I${sr}`, d.Pdc > 0 ? r.allocPrice / d.Pdc : 0, EUR, false, HEAD]
+      r.isBess && d.bess ? ['  prezzo €/kWh di accumulo', `Riepilogo!H${sr}/${Math.round(d.bess.E)}`, r.allocPrice / d.bess.E, EUR, false, HEAD] : ['  prezzo €/kWp', `Riepilogo!I${sr}`, d.Pdc > 0 ? r.allocPrice / d.Pdc : 0, EUR, false, HEAD]
     ];
     L2.forEach(([l, f, v, fm, b, col], i) => { const rr = tot + i; put(ws, 'B' + rr, l, { font: { bold: !!b, color: col ? { argb: col } : undefined } }); put(ws, 'F' + rr, fx(f, v), { fmt: fm, font: { bold: !!b, color: col ? { argb: col } : undefined }, border: i === 0 ? line : undefined }); });
     // riepilogo per categoria della sezione
@@ -2937,7 +3047,7 @@ async function exportXlsxClient() {
   const sheetName = (nm) => { let b = String(nm).replace(/[\[\]:*?\/\\']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 28) || 'Sezione'; let x = b, i = 2; while (used.has(x)) x = `${b.slice(0, 25)} (${i++})`; used.add(x); return x; };
   const totRefs = [];
   // un foglio per sezione + opere comuni
-  const blocks = R.res.map((r, si) => ({ title: r.sec.name, sub: `${r.sec.mode === 'roof' ? 'Impianto su copertura' : 'Pensilina fotovoltaica'} · ${nf(r.d.Pdc, 1)} kWp · ${nf(r.d.Nmod)} moduli ${r.sec.state.mod ? r.sec.state.mod.name : ''}`, items: r.items, r, kwp: r.d.Pdc }));
+  const blocks = R.res.map((r, si) => ({ title: r.sec.name, sub: r.isBess && r.d.bess ? `Sistema di accumulo · ${nf(r.d.bess.E)} kWh / ${nf(r.d.bess.kW)} kW` : `${r.sec.mode === 'roof' ? 'Impianto su copertura' : 'Pensilina fotovoltaica'} · ${nf(r.d.Pdc, 1)} kWp · ${nf(r.d.Nmod)} moduli ${r.sec.state.mod ? r.sec.state.mod.name : ''}`, items: r.items, r, kwp: r.d.Pdc }));
   blocks.push({ title: 'Opere comuni', sub: 'Connessione, quadri di sito, monitoraggio, sicurezza di cantiere, progettazione, direzione lavori e pratiche', items: R.items, common: true });
   for (const b of blocks) {
     const ws = wb.addWorksheet(b.common ? 'Opere comuni' : sheetName(b.title));
@@ -2977,15 +3087,15 @@ async function exportXlsxClient() {
   const secR = totRefs.slice(0, -1);
   secR.forEach((x, i) => {
     const n = 6 + i;
-    put(ws0, 'A' + n, x.b.title); put(ws0, 'B' + n, x.b.r.sec.mode === 'roof' ? 'Copertura' : 'Pensilina'); put(ws0, 'C' + n, +x.b.kwp.toFixed(2), { fmt: NUM });
+    put(ws0, 'A' + n, x.b.title); put(ws0, 'B' + n, x.b.r.isBess ? 'Accumulo' : x.b.r.sec.mode === 'roof' ? 'Copertura' : 'Pensilina'); put(ws0, 'C' + n, +x.b.kwp.toFixed(2), { fmt: NUM });
     put(ws0, 'D' + n, fx(x.ref, x.v), { fmt: EUR }); put(ws0, 'E' + n, fx(`IF(C${n}>0,D${n}/C${n},0)`, x.b.kwp > 0 ? x.v / x.b.kwp : 0), { fmt: EUR });
-    const sh = kw > 0 ? x.b.kwp / kw : 0;
-    put(ws0, 'F' + n, fx(`D${n}+$D$${6 + secR.length}*IF($C$${8 + secR.length}>0,C${n}/$C$${8 + secR.length},0)`, x.v + comm.v * sh), { fmt: EUR, font: { bold: true } });
+    const sh = x.b.r.w != null ? x.b.r.w : (kw > 0 ? x.b.kwp / kw : 0);
+    put(ws0, 'F' + n, fx(`D${n}+$D$${6 + secR.length}*${(+sh).toFixed(6)}`, x.v + comm.v * sh), { fmt: EUR, font: { bold: true } });
     put(ws0, 'G' + n, fx(`IF(C${n}>0,F${n}/C${n},0)`, x.b.kwp > 0 ? (x.v + comm.v * sh) / x.b.kwp : 0), { fmt: EUR, font: { bold: true } });
   });
   const cn = 6 + secR.length;
   put(ws0, 'A' + cn, 'Opere comuni (connessione, sicurezza di cantiere, progettazione e pratiche)', { font: { italic: true } }); put(ws0, 'D' + cn, fx(comm.ref, comm.v), { fmt: EUR, font: { italic: true } });
-  put(ws0, 'F' + cn, 'ripartite per kWp nella colonna a fianco', { font: { size: 8, italic: true } });
+  put(ws0, 'F' + cn, 'ripartite nella colonna a fianco (FV per kWp, accumulo per importo)', { font: { size: 8, italic: true } });
   const tn = cn + 2, totV = totRefs.reduce((a, x) => a + x.v, 0);
   put(ws0, 'A' + tn, 'TOTALE OFFERTA', { font: { bold: true, size: 12, color: { argb: HEAD } }, border: line });
   put(ws0, 'C' + tn, fx(secR.length ? `SUM(C6:C${cn - 1})` : '0', kw), { fmt: NUM, font: { bold: true }, border: line });
