@@ -575,7 +575,7 @@ const PRICES = {
   // strutture carport
   steel: 2.4, clamps_cp: 8, sheet_cp: 18, gutter_cp: 35,
   // inverter
-  bess: 330, bess_inst: 2500,
+  bess_ems: 2500, bess_qe: 1200, bess_base: 140, bess_room: 5000, bess_fence: 45, bess_tr_cab: 1100, bess_tr_ct: 2800, bess_crane_ct: 3000, bess_comm: 1200, bess_vvf: 1500, bess_conn: 1000, bess_mvcab: 75,
   // cavi
   mc4: 6.0, corr_dc: 0.6, tray_dc: 14, tray_ac: 28, equip: 1.4, data_cab: 1.6,
   earth_rope: 6.5, earth_rod: 85,
@@ -626,6 +626,79 @@ function pickAC(Ib, L, V, cosphi, k, dvMax, T) {
     best = { n, S, Iz: n * AC_IZ[S] * k, dv, In, cost: n * AC_PRICE[S], fail: true };
   }
   return best;
+}
+
+/* ============================================================
+   ACCUMULO (BESS) C&I: dimensionamento, formato, voci di computo
+   Prezzi: indagine di mercato 2026 (listini C&I, report di settore); i prezzari regionali non hanno voci C&I.
+   ============================================================ */
+const BESS_UNITS = {
+  cabinet:   { kwh: 215, kw: 108, foot: 2.1, base: 4.5, t: 2.6, name: 'cabinet outdoor 108 kW / 215 kWh' },
+  container: { kwh: 3727, kw: 1863, foot: 14.9, base: 26, t: 36, name: 'container 20\' da 3,7 MWh' }
+};
+// €/kWh del sistema completo (batterie LFP, PCS, BMS, climatizzazione, antincendio integrato) in funzione della taglia
+const BESS_CURVE = [[100, 420], [215, 300], [500, 250], [1000, 210], [2000, 180], [4000, 160], [10000, 145]];
+function bessUnitPrice(E) {
+  const c = BESS_CURVE; if (E <= c[0][0]) return c[0][1]; if (E >= c[c.length - 1][0]) return c[c.length - 1][1];
+  for (let i = 1; i < c.length; i++) if (E <= c[i][0]) { const [x0, y0] = c[i - 1], [x1, y1] = c[i]; const f = Math.log(E / x0) / Math.log(x1 / x0); return Math.round(y0 + (y1 - y0) * f); }
+  return c[c.length - 1][1];
+}
+function bessCalc(cfg, costH) {
+  const P = PRICES;
+  const E = Math.max(0, cfg.kwh || 0);
+  const fmt = cfg.fmt && cfg.fmt !== 'auto' ? cfg.fmt : (E > 2000 ? 'container' : 'cabinet');
+  const U = BESS_UNITS[fmt];
+  const n = Math.max(1, Math.ceil(E / U.kwh - 1e-6));
+  const kWauto = Math.round(E * 0.5);
+  const kW = cfg.kw > 0 ? cfg.kw : kWauto;
+  const C = E > 0 ? kW / E : 0;
+  const base = bessUnitPrice(E);
+  const unit = Math.round(base * (C > 0.5 ? 1 + 0.35 * (C - 0.5) / 0.5 : 1));
+  const L = cfg.l > 0 ? cfg.l : 30;
+  const Ib = kW * 1000 / (Math.sqrt(3) * 400);
+  const cab = pickAC(Ib, L, 400, 1, cfg.kgrp || 0.8, 1.0, cfg.tamb || 40);
+  const ci = cfg.ci || 1;
+  const rows = [], checks = [];
+  const r = (k, id, desc, qty, um, u, opt = {}) => rows.push({ k, id, desc, qty, um, u, opt });
+  const tag = cfg.site ? ' di sito' : '';
+  r('INV', 'bess_unit', `Sistema di accumulo${tag} LFP all-in-one: batterie, PCS bidirezionale, BMS, climatizzazione, rilevazione e spegnimento integrati · ${n} × ${U.name} · ${Math.round(kW)} kW`, Math.round(E), 'kWh', unit, { mat: true, ref: 'IEC 62619 · IEC 62933 · CEI 0-16 All. Nbis / CEI 0-21 All. Bbis' });
+  if (cfg.ems !== false) r('MON', 'bess_ems', 'EMS di gestione accumulo e power meter al punto di connessione (autoconsumo, peak shaving, limitazione immissione)', 1, 'a corpo', P.bess_ems + 250 * n);
+  if (fmt === 'container') {
+    // taglia MW: collegamento in media tensione con trasformatore dedicato (skid PCS/MT), non in bassa tensione
+    const kva = kW * 1.1, t = TRAFO.find(x => x[0] >= kva / n) || TRAFO[TRAFO.length - 1];
+    r('QE', 'bess_mv', `Skid di trasformazione BT/MT per accumulo: trasformatore ${t[0]} kVA e scomparto MT di protezione per ogni container`, n, 'pz', t[1] + P.mt_cell, { mat: true, ref: 'CEI 0-16 · Ecodesign UE 2019/1783' });
+    r('CAB', 'bess_mvcab', 'Linea MT in cavo ARE4H5E 3×1×95 mm² fino alla cabina utente, con terminazioni', Math.round(L * 1.05), 'm', P.bess_mvcab, { mat: true, ref: 'CEI 11-17' });
+  } else {
+    r('QE', 'bess_qe', `Quadro AC di parallelo accumulo: interruttore generale ${cab.In} A con protezione differenziale, partenze per unità, SPD, sezionatore`, 1, 'a corpo', Math.round(P.bess_qe + 22 * kW), { mat: true, ref: 'CEI EN 61439-2' });
+    r('CAB', 'bess_cab', `Cavo FG16OR16 4×${cab.S} mm² accumulo → quadro${cab.n > 1 ? ` (${cab.n} in parallelo)` : ''}`, Math.round(L * 1.05), 'm', +(AC_PRICE[cab.S] * cab.n * ci).toFixed(2), { mat: true, ref: 'CEI 64-8 · IEC 60364-5-52' });
+  }
+  r('CAB', 'bess_data', 'Cavo dati / fibra ottica accumulo – EMS – datalogger', Math.round(L * 1.1), 'm', P.data_cab || 1.6, { mat: true });
+  if (cfg.place === 'indoor') {
+    r('CIV', 'bess_room', 'Adeguamento locale batterie: compartimentazione REI 120, porte REI, ventilazione meccanica dedicata, rivelazione gas', 1, 'a corpo', Math.round(P.bess_room + 10 * E), { ref: 'Linea guida VVF BESS 23/12/2024' });
+  } else {
+    r('CIV', 'bess_base', `Basamento in c.a. per ${fmt === 'container' ? 'container' : 'cabinet'} (scavo, magrone, platea armata, cavidotti di ingresso)`, Math.round(U.base * n), 'm²', P.bess_base);
+    if (fmt === 'cabinet') r('CIV', 'bess_bump', 'Paracolpi di protezione dei cabinet', 2 * n, 'pz', P.bumper, { mat: true });
+    else {
+      const Lf = n * 6.1 + (n - 1) * 4 + 6, Wf = 2.44 + 6;
+      r('CIV', 'bess_fence', 'Recinzione permanente h 1,8 m dell\'area accumulo con due accessi contrapposti per i mezzi VVF', Math.round(2 * (Lf + Wf)), 'm', P.bess_fence, { ref: 'Linea guida VVF BESS 23/12/2024' });
+    }
+  }
+  const trucks = fmt === 'container' ? n : Math.ceil(n / 4);
+  r('NOL', 'bess_trans', fmt === 'container' ? `Trasporto eccezionale dei container (${n}) e posizionamento con autogru 100 t` : `Trasporto dedicato dei cabinet (${n}, circa ${fx(U.t, 1)} t l'uno) e posizionamento con autogru`, 1, 'a corpo', fmt === 'container' ? n * P.bess_tr_ct + Math.ceil(n / 2) * P.bess_crane_ct : trucks * P.bess_tr_cab + Math.ceil(n / 8) * P.crane);
+  r('INV', 'bess_comm', 'Messa in servizio con tecnico del costruttore, configurazione EMS e prove funzionali', 1, 'a corpo', P.bess_comm + 350 * n);
+  const hours = Math.round(fmt === 'container' ? 24 + 32 * n + 0.08 * L : 10 + 8 * n + 0.08 * L);
+  r('MDO', 'mdo_bess', `Posa e cablaggio accumulo${tag}: collegamenti di potenza e dati, quadro, EMS, assistenza alla messa in servizio`, hours, 'h', costH);
+  r('PRO', 'bess_vvf', 'Valutazione del rischio incendio e progetto antincendio dell\'accumulo', 1, 'a corpo', Math.round(P.bess_vvf + 0.6 * E), { ref: 'Linea guida VVF BESS 23/12/2024 · DPR 151/2011' });
+  r('PRO', 'bess_conn', 'Pratiche per l\'accumulo: modifica della connessione e del regolamento di esercizio, registrazione GAUDÌ', 1, 'a corpo', P.bess_conn, { ref: 'TICA · CEI 0-16/0-21' });
+  // verifiche
+  if (fmt === 'container' && cfg.conn === 'BT') checks.push(['warn', 'Accumulo in container con connessione in BT', 'Un container da 3,7 MWh si collega in media tensione: con connessione BT scegliere i cabinet o rivedere la connessione.', 'CEI 0-16']);
+  if (fmt !== 'container' && cab.fail) checks.push(['warn', 'Linea accumulo oltre la caduta di tensione', `Con ${L} m servono sezioni maggiori o un quadro più vicino.`, 'CEI 64-8']);
+  if (C > 0.55) checks.push(['info', `Accumulo a ${fx(C, 2)} C`, 'Oltre 0,5 C servono PCS più grandi o celle ad alta potenza: prezzo aumentato in proporzione (stima).', '']);
+  if (Math.abs(n * U.kwh - E) / Math.max(E, 1) > 0.15 && fmt === 'cabinet') checks.push(['info', 'Capacità non multipla del modulo commerciale', `${n} unità da ${U.kwh} kWh danno ${fx(n * U.kwh, 0)} kWh: il prezzo è calcolato sui ${fx(E, 0)} kWh inseriti.`, '']);
+  if (cfg.place === 'indoor') checks.push(['warn', 'Accumulo all\'interno di un edificio', 'Locale dedicato con compartimentazione, ventilazione dimensionata sul venting, rivelazione gas e spegnimento automatico; verificare con il professionista antincendio se l\'attività è soggetta a controllo VVF.', 'Linea guida VVF BESS 23/12/2024']);
+  else if (fmt === 'container') checks.push(['info', 'Container BESS: distanze di sicurezza', 'Linea guida VVF: 20 m esterna, 6 m di protezione, 4 m tra container (dimezzabili con barriere REI), area del singolo container ≤ 32 m², IP55, mai in zona ATEX.', 'Linea guida VVF BESS 23/12/2024']);
+  else checks.push(['info', 'Cabinet BESS all\'aperto', 'Posizionare a terra (circa 2,6 t per cabinet) lontano da vie di esodo, depositi combustibili e aperture; distanze da concordare con il professionista antincendio.', 'Linea guida VVF BESS 23/12/2024']);
+  return { d: { E, kW, kWauto, C, fmt, n, unit, base, cab, hours, days: fmt === 'container' ? 2 * n + 1 : Math.ceil(n / 3) + 1, unitKwh: U.kwh }, rows, checks };
 }
 
 /* ============================================================
@@ -937,9 +1010,19 @@ function compute(S, mode, opts) {
 
   // Inverter
   add(C.INV, 'inv', `Inverter ${I.name}`, d.Ninv, 'pz', I.price, { mat: true });
+  // accumulo della sezione
+  d.bess = null; d.bessEauto = 0;
+  if (S.bs_on) {
+    const unitK = (S.bs_fmt === 'container') ? BESS_UNITS.container.kwh : BESS_UNITS.cabinet.kwh;
+    d.bessEauto = Math.max(unitK, Math.round(d.Pdc * (S.bs_ratio > 0 ? S.bs_ratio : 1) / unitK) * unitK);
+    const B = bessCalc({ kwh: S.bs_kwh > 0 ? S.bs_kwh : d.bessEauto, kw: S.bs_kw, fmt: S.bs_fmt, place: S.bs_place, l: S.bs_l, ems: S.bs_ems !== false, kgrp: S.k_group_ac, tamb: S.t_amb, ci: S.cable_index, conn: d.conn }, S.cost_h);
+    d.bess = B.d;
+    for (const x of B.rows) add(x.k === 'CIV' ? 'Opere civili e fondazioni' : C[x.k], x.id, x.desc, x.qty, x.um, x.u, x.opt);
+    for (const c of B.checks) chk(c[0], c[1], c[2], c[3]);
+  }
   if (!SITE && S.bess_kwh > 0) {
-    add(C.INV, 'bess', 'Sistema di accumulo C&I (batterie + PCS + BMS)', S.bess_kwh, 'kWh', P.bess, { mat: true, ref: 'CEI 0-16/0-21 All. accumuli' });
-    add(C.INV, 'bess_inst', 'Installazione, cablaggio e messa in servizio accumulo', 1, 'a corpo', P.bess_inst + 8 * S.bess_kwh);
+    const B = bessCalc({ kwh: S.bess_kwh, l: 30, site: true }, S.cost_h);
+    for (const x of B.rows) add(C[x.k], x.id + '_site', x.desc, x.qty, x.um, x.u, x.opt);
   }
 
   // Cavi
@@ -1096,15 +1179,16 @@ function compute(S, mode, opts) {
     if (S.led) add(C.CIV, 'led', 'Illuminazione LED sotto pensilina IP66 (1 ogni 2 stalli, cablata)', Math.ceil(d.stalls / 2), 'pz', P.led, { mat: true, ref: 'UNI EN 12464-2' });
     if (S.ev_n > 0) add(C.CIV, 'ev', 'Punto di ricarica EV 22 kW con linea dedicata e protezioni', S.ev_n, 'pz', P.ev, { mat: true, ref: 'CEI 64-8 sez. 722' });
   }
-  // scavi e cavidotti di collegamento al locale tecnico / cabina (tetto e pensilina)
+  // scavi e cavidotti di collegamento al locale tecnico / cabina (tetto e pensilina): opere a terra
+  const CIVG = 'Opere civili e fondazioni';
   d.trenchM = S.trench_m > 0 ? S.trench_m : 0;
   if (d.trenchM > 0) {
     const surf = S.trench_surf || 'asfalto';
-    add(C.CIV, 'trench', 'Scavo a sezione obbligata 0,4 × 0,8 m, cavidotto con 2 corrugati Ø125, nastro segnalatore, rinterro e conferimento eccedenze', d.trenchM, 'm', P.trench, { ref: 'CEI 11-17 · DPR 120/2017' });
-    add(C.CIV, 'pit', 'Pozzetti di ispezione con chiusino carrabile D400 (1 ogni 25 m e ai cambi di direzione)', Math.ceil(d.trenchM / 25) + 1, 'pz', P.pit);
-    if (surf === 'asfalto') add(C.CIV, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione bituminosa lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.asphalt);
-    else if (surf === 'cls') add(C.CIV, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione industriale in calcestruzzo lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.trench_cls);
-    if (S.trench_cross > 0) add(C.CIV, 'trench_x', 'Attraversamenti (sottoservizi, strade interne) con spingitubo o scavo a mano', S.trench_cross, 'cad', P.trench_x);
+    add(CIVG, 'trench', 'Scavo a sezione obbligata 0,4 × 0,8 m, cavidotto con 2 corrugati Ø125, nastro segnalatore, rinterro e conferimento eccedenze', d.trenchM, 'm', P.trench, { ref: 'CEI 11-17 · DPR 120/2017' });
+    add(CIVG, 'pit', 'Pozzetti di ispezione con chiusino carrabile D400 (1 ogni 25 m e ai cambi di direzione)', Math.ceil(d.trenchM / 25) + 1, 'pz', P.pit);
+    if (surf === 'asfalto') add(CIVG, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione bituminosa lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.asphalt);
+    else if (surf === 'cls') add(CIVG, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione industriale in calcestruzzo lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.trench_cls);
+    if (S.trench_cross > 0) add(CIVG, 'trench_x', 'Attraversamenti (sottoservizi, strade interne) con spingitubo o scavo a mano', S.trench_cross, 'cad', P.trench_x);
   }
   // rinforzi strutturali e opere edili accessorie all'installazione (solo copertura)
   if (mode === 'roof') {
@@ -1154,7 +1238,7 @@ function compute(S, mode, opts) {
   const crewH = S.team * S.h_day;
   d.days = Math.max(1, Math.ceil(d.hTot / crewH)) + (mode === 'carport' ? Math.ceil(d.hSteel / (S.team * S.h_day)) : 0);
   d.daysCivil = mode === 'carport' ? Math.ceil(d.ncol / 6) + 2 : 0;
-  d.daysTot = d.days + d.daysCivil + (mode === 'roof' ? (d.asbDays || 0) + (d.redoM2 > 0 ? Math.ceil(d.redoM2 / 400) : 0) + (d.skyNew > 0 ? Math.ceil(d.skyNew / 80) : 0) + Math.ceil((d.reinfKg || 0) / 500 + (d.reinfFrp || 0) / 40) + (d.trenchM > 0 ? Math.ceil(d.trenchM / 60) : 0) : 0);
+  d.daysTot = d.days + d.daysCivil + (d.bess ? d.bess.days : 0) + (mode === 'roof' ? (d.asbDays || 0) + (d.redoM2 > 0 ? Math.ceil(d.redoM2 / 400) : 0) + (d.skyNew > 0 ? Math.ceil(d.skyNew / 80) : 0) + Math.ceil((d.reinfKg || 0) / 500 + (d.reinfFrp || 0) / 40) + (d.trenchM > 0 ? Math.ceil(d.trenchM / 60) : 0) : 0);
   d.months = Math.max(1, Math.ceil(d.daysTot / 21));
 
   const tagH = (k) => d.mdoManual && S['h_' + k] > 0 ? ' · ore inserite a mano' : '';
@@ -1378,6 +1462,7 @@ const dmSpese = (V) => V <= 1e6 ? 25 : V >= 25e6 ? 10 : 25 - 15 * (V - 1e6) / 24
    SITO: più sezioni (tetti, pensiline) con costi comuni contati una volta
    ============================================================ */
 const SITE_CAT = {
+  CAB: 'Cavi, connettori e vie cavi', CIV: 'Opere civili e fondazioni', NOL: 'Noli e sollevamenti',
   QE: 'Quadri, protezioni e connessione', INV: 'Inverter e accumulo', MON: 'Monitoraggio',
   SIC: 'Costi della sicurezza (All. XV D.Lgs. 81/08)', CSP: 'Coordinamento sicurezza CSP/CSE', MDO: 'Manodopera e trasferte', PRO: 'Progettazione, pratiche e connessione'
 };
@@ -1385,7 +1470,7 @@ const CAT_ORDER_ALL = ['Moduli e ottimizzatori', 'Strutture di supporto', 'Inver
   'Quadri, protezioni e connessione', 'Monitoraggio', 'Opere edili in copertura', 'Opere civili e fondazioni',
   'Costi della sicurezza (All. XV D.Lgs. 81/08)', 'Coordinamento sicurezza CSP/CSE', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
 const DM_STR_IDS = new Set(['steel', 'clamps_cp', 'st_budget', 'sheet_cp', 'gutter_cp', 'plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'mdo_steel']);
-const DM_EDI_IDS = new Set(['trench_rip', 'trench_x', 'demo_fibro', 'demo_guaina', 'guaina_new', 'sovr_inc', 'sovr_sub', 'sky_new', 'asb_test', 'asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'redo_corpo', 'demo_sheet', 'demo_sw', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
+const DM_EDI_IDS = new Set(['bess_base_site', 'bess_bump_site', 'bess_fence_site', 'bess_room_site', 'bess_base', 'bess_bump', 'bess_fence', 'bess_room', 'trench_rip', 'trench_x', 'demo_fibro', 'demo_guaina', 'guaina_new', 'sovr_inc', 'sovr_sub', 'sky_new', 'asb_test', 'asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'redo_corpo', 'demo_sheet', 'demo_sw', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
 // classe DM di una voce del computo (per l'importo V dei compensi): imp, str, edi o '' se esclusa
 function dmClass(it, mode, isSite) {
   if (it.cat === SITE_CAT.PRO || it.cat === SITE_CAT.CSP) return '';
@@ -1487,9 +1572,15 @@ function computeSite(site) {
     } else chk('info', 'Verifica capacità cabina', `Il trasformatore esistente deve assorbire ${fx(Pac, 0)} kW di immissione; controllare PG e regolamento di esercizio.`, 'CEI 0-16');
   }
   if (C0.bess_kwh > 0) {
-    add(K.INV, 'bess', 'Sistema di accumulo C&I (batterie + PCS + BMS)', C0.bess_kwh, 'kWh', P.bess, { mat: true });
-    add(K.INV, 'bess_inst', 'Installazione, cablaggio e messa in servizio accumulo', 1, 'a corpo', P.bess_inst + 8 * C0.bess_kwh);
+    const B = bessCalc({ kwh: C0.bess_kwh, kw: C0.bess_kw, fmt: C0.bess_fmt, place: C0.bess_place, l: C0.bess_l, site: true, conn }, C0.cost_h);
+    sd.bess = B.d;
+    for (const x of B.rows) add(K[x.k], x.id + '_site', x.desc, x.qty, x.um, x.u, x.opt);
+    for (const c of B.checks) chk(c[0], c[1], c[2], c[3]);
   }
+  // potenza di accumulo complessiva rispetto alla connessione
+  const bessKW = res.reduce((a, r) => a + (r.d.bess ? r.d.bess.kW : 0), 0) + (sd.bess ? sd.bess.kW : 0);
+  sd.bessKW = bessKW; sd.bessKWh = res.reduce((a, r) => a + (r.d.bess ? r.d.bess.E : 0), 0) + (sd.bess ? sd.bess.E : 0);
+  if (bessKW > 0) chk('info', `Accumulo complessivo ${fx(sd.bessKWh, 0)} kWh / ${fx(bessKW, 0)} kW`, `Se l'EMS non limita la scarica verso la rete, la potenza in immissione da richiedere può arrivare a ${fx(Pac + bessKW, 0)} kW (FV + accumulo)${conn === 'BT' && Pac + bessKW > 100 ? ': oltre i 100 kW della BT' : ''}. Con limitazione dell'immissione resta ${fx(Pac, 0)} kW.`, 'TICA · CEI 0-16/0-21');
   if (C0.monitor && sd.ninv > 0) {
     add(K.MON, 'logger', 'Datalogger di impianto (fino a 80 inverter)', Math.max(1, Math.ceil(sd.ninv / 80)), 'pz', P.logger, { mat: true });
     add(K.MON, 'meter', 'Power meter trifase con TA per gestione e controllo immissione', 1, 'pz', P.meter, { mat: true });
@@ -1653,7 +1744,7 @@ function computeSite(site) {
 }
 
 const SIC_CAT = 'Costi della sicurezza (All. XV D.Lgs. 81/08)', CSP_CAT = 'Coordinamento sicurezza CSP/CSE';
-const api = { SIC_CAT, CSP_CAT, DESIGN_IDS, dmClass, compute, computeSite, DM_Q, DM_CAT, DM_DEFAULTS, DM_DEF_EL, DM_DEF_ED, DM_DEF_SIC, dmP, dmSpese, CAT_ORDER_ALL, ST_DEFAULTS, MOD_PRESETS, INV_PRESETS, ROOF_TYPES, PRICES, qsk, pickAC, nextIn, tica };
+const api = { bessCalc, bessUnitPrice, BESS_UNITS, SIC_CAT, CSP_CAT, DESIGN_IDS, dmClass, compute, computeSite, DM_Q, DM_CAT, DM_DEFAULTS, DM_DEF_EL, DM_DEF_ED, DM_DEF_SIC, dmP, dmSpese, CAT_ORDER_ALL, ST_DEFAULTS, MOD_PRESETS, INV_PRESETS, ROOF_TYPES, PRICES, qsk, pickAC, nextIn, tica };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PVEngine = api;
 })(this);
 </script>
@@ -1666,7 +1757,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 // dati che valgono per tutto il sito (connessione, clima, squadra, pratiche, condizioni economiche)
 function commonDefault() {
   return {
-    conn: 'auto', new_trafo: false, cci: 'auto', vvf: true, monitor: true, bess_kwh: 0, conn_cost: 0,
+    conn: 'auto', new_trafo: false, cci: 'auto', vvf: true, monitor: true, bess_kwh: 0, bess_kw: 0, bess_fmt: 'auto', bess_place: 'outdoor', bess_l: 30, conn_cost: 0,
     t_min: -15, t_max: 70, snow_zone: 'I-A', altitude: 345,
     team: 4, h_day: 8, cost_h: 30, carp_cost_h: 34, km: 30, eur_km: 0.5, trasf_pp: 0,
     prog_el: true, lightning_doc: true, dl: true,
@@ -1689,6 +1780,7 @@ function sectionStateDefault(mode) {
     l_dc: 35, l_extra: 8, dv_dc_max: 1.5, k_group_dc: 0.65, t_cab_dc: 70,
     l_ac1: 25, l_ac2: 60, dv_ac_max: 1.0, k_group_ac: 0.8, t_amb: 40, cable_index: 1.0,
     tray_dc: 0, tray_ac: 0, lps: false,
+    bs_on: false, bs_kwh: 0, bs_kw: 0, bs_ratio: 1, bs_fmt: 'auto', bs_place: 'outdoor', bs_l: 30, bs_ems: true,
     mdo_mode: 'calc', h_mod: 0, h_dc: 0, h_ac: 0, h_qe: 0, h_test: 0, h_steel: 0,
     ov: {}, qov: {}
   };
@@ -1865,6 +1957,18 @@ function secGroups(mode) {
     ]
   } : null);
   g.push({
+    id: 'bess', title: 'Accumulo (BESS)', sub: 'Opzionale · sistema C&I dedicato a questa sezione', fields: [
+      { k: 'bs_on', l: 'Sistema di accumulo per questa sezione', t: 'chk', wide: true, h: 'Accumulo LFP all-in-one accoppiato in AC, con PCS, BMS, climatizzazione e antincendio integrati. Compreso di quadro, linea, basamento, trasporto, posa, messa in servizio e pratiche.' },
+      { k: 'bs_ratio', l: 'Rapporto capacità / potenza FV', u: 'kWh/kWp', step: 0.1, show: (s) => s.bs_on, h: 'Usato se la capacità è vuota. 1 kWh/kWp è un valore tipico per autoconsumo industriale; arrotondato a moduli interi.' },
+      { k: 'bs_kwh', l: 'Capacità', u: 'kWh', step: 1, auto: (r) => r.d && r.d.bessEauto ? nf(r.d.bessEauto, 0) : '', show: (s) => s.bs_on },
+      { k: 'bs_kw', l: 'Potenza', u: 'kW', auto: (r) => r.d && r.d.bess ? nf(r.d.bess.kWauto, 0) : '', show: (s) => s.bs_on, h: 'Vuoto = 0,5 C (2 ore di scarica).' },
+      { k: 'bs_fmt', l: 'Formato', t: 'sel', o: [['auto', 'Automatico (cabinet fino a 2 MWh, poi container)'], ['cabinet', 'Cabinet outdoor 108 kW / 215 kWh'], ['container', 'Container 20\' da 3,7 MWh']], show: (s) => s.bs_on },
+      { k: 'bs_place', l: 'Posizione', t: 'sel', o: [['outdoor', 'All\'aperto su basamento in c.a.'], ['indoor', 'In locale dedicato (REI, ventilazione)']], show: (s) => s.bs_on },
+      { k: 'bs_l', l: 'Distanza dal quadro di parallelo', u: 'm', show: (s) => s.bs_on },
+      { k: 'bs_ems', l: 'EMS e power meter al punto di connessione', t: 'chk', show: (s) => s.bs_on, h: 'Togli la spunta se l\'EMS è già previsto per un altro accumulo del sito.' }
+    ]
+  });
+  g.push({
     id: 'mod', title: 'Modulo fotovoltaico', sub: 'Dati da datasheet del fornitore', fields: [
       { k: 'mod_preset', l: 'Modello', t: 'sel', o: [...opts(E.MOD_PRESETS), ['custom', 'Personalizzato']], wide: true, src: true },
       { k: 'mod.name', l: 'Descrizione', t: 'text', wide: true },
@@ -1999,7 +2103,11 @@ const COMMON_GROUPS = [
     { k: 'new_trafo', l: 'Nuovo trasformatore dedicato', t: 'chk', show: (s) => s.conn !== 'BT' },
     { k: 'vvf', l: 'Sgancio di emergenza e pratica VVF', t: 'chk' },
     { k: 'monitor', l: 'Monitoraggio', t: 'chk' },
-    { k: 'bess_kwh', l: 'Accumulo di sito', u: 'kWh' },
+    { k: 'bess_kwh', l: 'Accumulo di sito (unico, al punto di connessione)', u: 'kWh', h: 'In alternativa all\'accumulo per sezione (riquadro nelle sezioni). 0 = nessuno.' },
+    { k: 'bess_kw', l: 'Potenza accumulo di sito', u: 'kW', auto: (r) => r.sd && r.sd.bess ? nf(r.sd.bess.kWauto, 0) : '', show: (s) => s.bess_kwh > 0 },
+    { k: 'bess_fmt', l: 'Formato', t: 'sel', o: [['auto', 'Automatico (cabinet fino a 2 MWh)'], ['cabinet', 'Cabinet 108 kW / 215 kWh'], ['container', 'Container 20\' 3,7 MWh']], show: (s) => s.bess_kwh > 0 },
+    { k: 'bess_place', l: 'Posizione', t: 'sel', o: [['outdoor', 'All\'aperto su basamento'], ['indoor', 'In locale dedicato']], show: (s) => s.bess_kwh > 0 },
+    { k: 'bess_l', l: 'Distanza dal quadro di connessione', u: 'm', show: (s) => s.bess_kwh > 0 },
     { k: 'conn_cost', l: 'Corrispettivo di connessione', u: '€', h: 'Dal preventivo del distributore, se noto.' }
   ] },
   { id: 'mdo', title: 'Squadra e trasferte', sub: 'Stessa squadra per tutte le sezioni', fields: [
