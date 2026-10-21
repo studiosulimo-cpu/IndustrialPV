@@ -564,6 +564,157 @@ function qsk(zone, as) {
   return 1.5;
 }
 
+/* ---------- Vento (NTC 2018 §3.3, Circ. 7/2019 C3.3) ---------- */
+// Tab. 3.3.I: vb,0 [m/s], a0 [m], ks
+const WIND_ZONES = {
+  1: { vb0: 25, a0: 1000, ks: 0.40, n: "Valle d'Aosta, Piemonte, Lombardia, Trentino-Alto Adige, Veneto, Friuli V.G. (esclusa prov. Trieste)" },
+  2: { vb0: 25, a0: 750, ks: 0.45, n: 'Emilia-Romagna' },
+  3: { vb0: 27, a0: 500, ks: 0.37, n: 'Toscana, Marche, Umbria, Lazio, Abruzzo, Molise, Puglia, Campania, Basilicata, Calabria (esclusa prov. Reggio C.)' },
+  4: { vb0: 28, a0: 500, ks: 0.36, n: 'Sicilia e prov. Reggio Calabria' },
+  5: { vb0: 28, a0: 750, ks: 0.40, n: 'Sardegna (a oriente della retta Capo Teulada – Isola di Maddalena)' },
+  6: { vb0: 28, a0: 500, ks: 0.36, n: 'Sardegna (a occidente della retta Capo Teulada – Isola di Maddalena)' },
+  7: { vb0: 28, a0: 1000, ks: 0.54, n: 'Liguria' },
+  8: { vb0: 30, a0: 1500, ks: 0.50, n: 'Provincia di Trieste' },
+  9: { vb0: 31, a0: 500, ks: 0.32, n: 'Isole (escluse Sicilia e Sardegna) e mare aperto' }
+};
+// Tab. 3.3.II: kr, z0 [m], zmin [m]
+const EXP_CATS = { I: { kr: 0.17, z0: 0.01, zmin: 2 }, II: { kr: 0.19, z0: 0.05, zmin: 4 }, III: { kr: 0.20, z0: 0.10, zmin: 5 }, IV: { kr: 0.22, z0: 0.30, zmin: 8 }, V: { kr: 0.23, z0: 0.70, zmin: 12 } };
+// pressione cinetica di picco qp(z) [kN/m²], TR = 50 anni (cr = 1), ρ = 1,25 kg/m³
+function windQp(zone, as, cat, z, ct) {
+  const Z = WIND_ZONES[zone] || WIND_ZONES[1], K = EXP_CATS[cat] || EXP_CATS.III;
+  const a = Math.max(0, as || 0);
+  const ca = a <= Z.a0 ? 1 : 1 + Z.ks * (Math.min(a, 1500) / Z.a0 - 1);
+  const vb = Z.vb0 * ca;
+  const qb = 0.5 * 1.25 * vb * vb / 1000;
+  const zz = Math.max(z, K.zmin), c = ct > 0 ? ct : 1, L = Math.log(zz / K.z0);
+  const ce = K.kr * K.kr * c * L * (7 + c * L);
+  return { vb, ca, qb, ce, qp: qb * ce, zone: +zone || 1, cat, z: zz };
+}
+// coefficienti globali di forza cf per tettoie (EN 1991-1-4 Tab. 7.6 e 7.7, recepiti da Circ. C3.3.8.2 / CNR-DT 207 G.6)
+// [α, cf,max, cf,min(φ=0), cf,min(φ=1)]
+const CF_MONO = [[0, 0.2, -0.5, -1.3], [5, 0.4, -0.7, -1.4], [10, 0.5, -0.9, -1.4], [15, 0.7, -1.0, -1.4], [20, 0.8, -1.1, -1.5], [25, 1.0, -1.2, -1.6], [30, 1.2, -1.3, -1.6]];
+const CF_DUO = [[-20, 0.7, -0.7, -0.9], [-15, 0.5, -0.6, -0.8], [-10, 0.4, -0.6, -0.8], [-5, 0.3, -0.5, -0.8], [0, 0.3, -0.6, -0.9], [5, 0.3, -0.6, -0.9], [10, 0.4, -0.7, -0.9], [15, 0.4, -0.8, -0.9], [20, 0.6, -0.9, -1.2], [25, 0.7, -1.0, -1.3], [30, 0.9, -1.0, -1.3]];
+function canopyCf(type, alpha, phi) {
+  const T = type === 'duo' ? CF_DUO : CF_MONO;
+  const a = Math.max(T[0][0], Math.min(T[T.length - 1][0], alpha));
+  let i = 0; while (i < T.length - 2 && a > T[i + 1][0]) i++;
+  const A = T[i], B = T[i + 1], t = (a - A[0]) / (B[0] - A[0]);
+  const lin = (k) => A[k] + (B[k] - A[k]) * t;
+  const p = Math.max(0, Math.min(1, phi || 0));
+  return { max: lin(1), min: lin(2) + (lin(3) - lin(2)) * p, min0: lin(2), min1: lin(3) };
+}
+/* Verifica di un blocco di zavorra appoggiato (senza scavo) sotto un pilastro.
+   Carichi in kN, x = ascissa del punto di applicazione rispetto all'asse pilastro (m, trasversale alla fila),
+   Fz > 0 verso il basso, H orizzontale (m di braccio z dal piano di appoggio del pilastro).
+   EQU (NTC 2018 Tab. 2.6.I): γG1 0,9 fav / 1,1 sfav, γQ 1,5 sfav / 0 fav; scorrimento A1 + γR 1,1; tensioni SLE caratteristica. */
+function ballastCheck(cases, blk) {
+  const { B, L, h, gam, mu, padm, Gcol } = blk;
+  const W = gam * B * L * h + (Gcol || 0);
+  let worst = { eqU: Infinity, sl: Infinity, sig: 0 };
+  for (const cs of cases) {
+    for (const s of [1, -1]) {                       // spigolo di ribaltamento a +B/2 e −B/2
+      const e = B / 2;
+      let R = 0.9 * W * e;
+      for (const f of cs.loads) {
+        const arm = e - s * f.x;                      // braccio verso lo spigolo
+        const m = f.Fz * arm;                         // > 0 stabilizzante
+        const g = f.t === 'G' ? (m >= 0 ? 0.9 : 1.1) : (m >= 0 ? 0 : 1.5);
+        R += g * m;
+      }
+      const Hm = cs.H * (cs.zH + h);                  // sempre destabilizzante nel verso peggiore
+      R -= 1.5 * Hm;
+      worst.eqU = Math.min(worst.eqU, R);
+    }
+    // scorrimento
+    let N = W;
+    for (const f of cs.loads) N += f.Fz * (f.t === 'G' ? 1.0 : (f.Fz >= 0 ? 0 : 1.5));
+    const Rsl = Math.max(0, N) * mu / 1.1 - 1.5 * cs.H;
+    worst.sl = Math.min(worst.sl, Rsl);
+    // tensioni sul piano di posa (valori caratteristici, SLE)
+    let Nk = W, Mk = 0;
+    for (const f of cs.loads) { Nk += f.Fz; Mk += f.Fz * f.x; }
+    Mk = Math.abs(Mk) + cs.H * (cs.zH + h);
+    let sig;
+    if (Nk <= 0) sig = Infinity;
+    else { const ex = Mk / Nk; sig = ex <= B / 6 ? Nk / (B * L) * (1 + 6 * ex / B) : (ex >= B / 2 ? Infinity : 2 * Nk / (3 * L * (B / 2 - ex))); }
+    worst.sig = Math.max(worst.sig, sig);
+  }
+  worst.ok = worst.eqU >= 0 && worst.sl >= 0 && worst.sig <= padm;
+  worst.W = W;
+  return worst;
+}
+
+/* Forze negli elementi di un gruppo rigido disposto su due file a ±s/2 (trasversali alla fila di pilastri):
+   micropali sotto un cordolo o tasselli sotto una piastra. Combinazione SLU STR: γG 1,3 sfav / 1,0 fav, γQ 1,5 sfav / 0 fav;
+   ogni azione è presa col coefficiente peggiore per l'elemento considerato. Wfix = peso proprio stabilizzante (cordolo). */
+function groupForces(cases, n, s, zArm, Wfix) {
+  const half = n / 2, xs = [s / 2, -s / 2], Sx2 = n * (s / 2) * (s / 2);
+  let Tmax = 0, Cmax = 0;
+  for (const cs of cases) for (const xi of xs) {
+    let T = -(Wfix || 0) / n * 1.0, C = (Wfix || 0) / n * 1.3;
+    for (const f of cs.loads) {
+      const c = f.Fz * (1 / n + f.x * xi / Sx2);          // contributo (compressione > 0)
+      if (f.t === 'G') { T += -c * (c > 0 ? 1.0 : 1.3); C += c * (c > 0 ? 1.3 : 1.0); }
+      else { T += -c * (c > 0 ? 0 : 1.5); C += c * (c > 0 ? 1.5 : 0); }
+    }
+    const h = 1.5 * cs.H * (cs.zH + (zArm || 0)) * Math.abs(xi) / Sx2;   // momento orizzontale, sfavorevole in entrambi i versi
+    T += h; C += h;
+    Tmax = Math.max(Tmax, T); Cmax = Math.max(Cmax, C);
+  }
+  return { T: Tmax, C: Cmax, half };
+}
+// micropali: tubi S355 disponibili (diametro × spessore, area mm², kg/m)
+const MP_TUBES = [{ n: '88,9 × 8', A: 2033, kg: 15.9 }, { n: '114,3 × 8', A: 2672, kg: 21.0 }, { n: '139,7 × 10', A: 4075, kg: 32.0 }, { n: '168,3 × 10', A: 4973, kg: 39.0 }];
+// attrito laterale limite indicativo per micropali iniettati a bassa pressione (IGU), kPa — ordine di grandezza da Bustamante-Doix, cautelativo
+const MP_SOILS = { ghiaia: { qs: 150, n: 'ghiaie e sabbie dense' }, sabbia: { qs: 100, n: 'sabbie medie' }, limo: { qs: 70, n: 'limi e sabbie limose' }, argilla: { qs: 50, n: 'argille consistenti' }, riporto: { qs: 30, n: 'riporti e terreni sciolti' }, roccia: { qs: 250, n: 'roccia tenera o alterata' } };
+// tasselli chimici: resistenza di progetto a trazione indicativa in cls C25/30 fessurato (barra 8.8, resina vinilestere), kN
+const ANCH_SIZES = [{ n: 'M16', hef: 125, NRd: 25, P: 'anch_m16' }, { n: 'M20', hef: 170, NRd: 40, P: 'anch_m20' }, { n: 'M24', hef: 210, NRd: 55, P: 'anch_m24' }];
+
+/* ---------- Ripristino pavimentazioni lungo gli scavi ----------
+   Prezzi di riferimento: Prezzario FVG 2025 e VdA 2025, depurati di spese generali (15%) e utile (10%) → ÷ 1,265,
+   perché nel preventivatore i prezzi unitari sono costi e il ricarico si applica dopo. */
+const SURF_TYPES = {
+  asfalto: 'Asfalto (demolizione in traccia, binder, tappeto)',
+  cls: 'Calcestruzzo industriale (demolizione, getto armato 20 cm, spolvero al quarzo)',
+  masselli: 'Masselli autobloccanti (rimozione e ricollocamento)',
+  stabilizzato: 'Ghiaia o misto stabilizzato',
+  verde: 'Verde (terra vegetale e semina)',
+  terreno: 'Sterrato (nessun ripristino)'
+};
+function trenchItems(add, cat, S, L, P) {
+  add(cat, 'trench', 'Scavo a sezione obbligata 0,4 × 0,8 m, cavidotto con 2 corrugati Ø125, nastro segnalatore, rinterro e conferimento eccedenze', L, 'm', P.trench, { ref: 'CEI 11-17 · DPR 120/2017' });
+  add(cat, 'pit', 'Pozzetti di ispezione con chiusino carrabile D400 (1 ogni 25 m e ai cambi di direzione)', Math.ceil(L / 25) + 1, 'pz', P.pit);
+  const surf = SURF_TYPES[S.trench_surf] ? S.trench_surf : 'asfalto';
+  const w = S.trench_rip_w > 0 ? S.trench_rip_w : 0.6;                 // larghezza della traccia da ripristinare
+  const A = Math.round(L * w);
+  const out = { surf, w, A, hand: false };
+  if (surf === 'asfalto') {
+    const wt = Math.max(w, S.trench_tapp_w > 0 ? S.trench_tapp_w : 1.0);   // tappeto definitivo a sormonto della traccia
+    const At = Math.round(L * wt), Af = Math.max(0, At - A);
+    const lay = S.trench_lay || 'auto';
+    out.hand = lay === 'mano' || (lay === 'auto' && At < 100);
+    const k = out.hand ? 1.3 : 1;
+    const hs = out.hand ? ' · stesa a mano / piccoli mezzi (+30%)' : '';
+    add(cat, 'trench_demo', 'Demolizione pavimentazione bituminosa in traccia: taglio con disco, scarifica, carico, trasporto e oneri di discarica', A, 'm²', P.asph_demo, { ref: 'cfr. Prezzario FVG 2025 12.8.BS1.01.B' });
+    add(cat, 'trench_binder', 'Ripristino strato di collegamento (binder) semiaperto, spessore compresso 8 cm' + hs, A, 'm²', +(P.asph_binder * k).toFixed(2), { ref: 'media FVG 2025 12.3.YS5.04.A · E-R C01.022.015' });
+    if (Af > 0) add(cat, 'trench_frez', `Fresatura 3 cm delle fasce laterali per il sormonto del tappeto (larghezza tappeto ${String(wt).replace('.', ',')} m)`, Af, 'm²', P.asph_frez, { ref: 'cfr. Prezzario FVG 2025 12.8.BS1.03.A' });
+    add(cat, 'trench_tapp', 'Tappeto d\'usura in conglomerato bituminoso chiuso, spessore compresso 3 cm, con mano d\'attacco' + hs, At, 'm²', +(P.asph_tapp * k).toFixed(2), { ref: 'media FVG 2025 12.4.YS5.01.B · E-R C01.022.020' });
+    out.At = At;
+  } else if (surf === 'cls') {
+    add(cat, 'trench_demo_cls', 'Demolizione pavimentazione in calcestruzzo armato fino a 20 cm in traccia, tagli con sega, carico, trasporto e oneri di discarica', A, 'm²', P.cls_demo, { ref: 'cfr. Prezzario FVG 2025 12.6.BQ4.01.B' });
+    add(cat, 'trench_cls_pav', 'Ripristino pavimentazione in cls C25/30 spessore 20 cm, spolvero al quarzo, giunti sigillati', A, 'm²', P.cls_pav, { ref: 'cfr. Prezzario FVG 2025 12.6.EQ4.01.C' });
+    add(cat, 'trench_mesh', 'Rete elettrosaldata B450C Ø8 20×20 con sormonti e ripresa con barre inghisate', Math.round(A * 4.35), 'kg', P.mesh_kg, { mat: true, ref: 'cfr. Prezzario VdA 2025 S08.F10.005' });
+  } else if (surf === 'masselli') {
+    add(cat, 'trench_pav', 'Rimozione accurata e ricollocamento masselli autobloccanti su letto di sabbia, integrazione 10% di elementi nuovi, compattazione', A, 'm²', P.pav_relay);
+  } else if (surf === 'stabilizzato') {
+    add(cat, 'trench_stab', 'Ripristino in misto granulare stabilizzato 15 cm, steso e rullato', A, 'm²', P.stab_rip, { ref: 'cfr. E-R C01.019.025' });
+  } else if (surf === 'verde') {
+    add(cat, 'trench_green', 'Ripristino a verde: terra vegetale 20 cm, livellamento e semina', A, 'm²', P.green_rip);
+  }
+  if (S.trench_cross > 0) add(cat, 'trench_x', 'Attraversamenti (sottoservizi, strade interne) con spingitubo o scavo a mano', S.trench_cross, 'cad', P.trench_x);
+  return out;
+}
+
 /* ---------- Prezzi unitari di default (tutti sovrascrivibili nel computo) ---------- */
 const PRICES = {
   // moduli e ottimizzatori
@@ -588,8 +739,12 @@ const PRICES = {
   logger: 1100, meter: 450, router: 250,
   // opere edili / civili
   asb_rem: 16, sandwich: 42, redo_grec: 26, flashing: 25, asb_plan: 900, asb_mon: 280, demo_sheet: 7, demo_sw: 11, demo_fibro: 9, demo_guaina: 5, guaina_new: 26, sovr_inc: 8, sovr_sub: 6, sky_new: 95, asb_test: 250, sandwich_40: 38, sandwich_60: 42, sandwich_80: 47, sandwich_100: 52,
-  plinth_m3: 260, anchor_kit: 120, asphalt: 30, soil: 25, micropile_m: 90,
-  geo: 2500, trench: 55, pit: 220, trench_cls: 65, trench_x: 650, reinf_steel: 4.2, reinf_frp: 180, led: 190, ev: 1700, bumper: 95, marking: 25,
+  plinth_m3: 360, anchor_kit: 120, asphalt: 57, soil: 29, micropile_m: 90,
+  ballast_m3: 230, ballast_tr: 550, ballast_bed: 18, plate_test: 380, crane_heavy: 1450,
+  mp_drill: 31.06, mp_tube: 2.21, mp_grout: 20, mp_mob: 3000, mp_test: 2200, mp_cap: 360,
+  anch_m16: 35, anch_m20: 48, anch_m24: 65, anch_plate: 180, slab_core: 140, slab_survey: 650, pull_test: 120,
+  geo: 2500, trench: 55, pit: 220, trench_x: 650,
+  asph_demo: 20.66, asph_binder: 18.32, asph_frez: 6.28, asph_tapp: 9.60, cls_demo: 69.45, cls_pav: 46.15, mesh_kg: 1.92, pav_relay: 32, stab_rip: 8, green_rip: 7, reinf_steel: 4.2, reinf_frp: 180, led: 190, ev: 1700, bumper: 95, marking: 25,
   // sicurezza
   parap_ms: 23, parap_nolo: 2.0, scaf_ms: 24, scaf_nolo: 2.8, tower_ms: 1200, tower_nolo: 150,
   skylight: 10.93, skylight_nolo: 0.84, nets_ms: 12.66, nets_nolo: 0, walk_ms: 12.43, walk_nolo: 1.22, parapC_ms: 30, parapC_nolo: 15, fall_kit: 1028, lifeline: 55, lifeline_doc: 600, fence: 3.70, fence_nolo: 0.46, site_hut: 550.32, site_hut_n: 244.57, dpi: 500, meet: 70,
@@ -729,12 +884,7 @@ function computeBess(S, opts) {
   // scavi e cavidotti fino al locale tecnico o alla cabina
   d.trenchM = S.trench_m > 0 ? S.trench_m : 0;
   if (d.trenchM > 0) {
-    const P = PRICES, surf = S.trench_surf || 'asfalto';
-    add(C.CIV, 'trench', 'Scavo a sezione obbligata 0,4 × 0,8 m, cavidotto con 2 corrugati Ø125, nastro segnalatore, rinterro e conferimento eccedenze', d.trenchM, 'm', P.trench, { ref: 'CEI 11-17 · DPR 120/2017' });
-    add(C.CIV, 'pit', 'Pozzetti di ispezione con chiusino carrabile D400 (1 ogni 25 m e ai cambi di direzione)', Math.ceil(d.trenchM / 25) + 1, 'pz', P.pit);
-    if (surf === 'asfalto') add(C.CIV, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione bituminosa lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.asphalt);
-    else if (surf === 'cls') add(C.CIV, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione industriale in calcestruzzo lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.trench_cls);
-    if (S.trench_cross > 0) add(C.CIV, 'trench_x', 'Attraversamenti (sottoservizi, strade interne) con spingitubo o scavo a mano', S.trench_cross, 'cad', P.trench_x);
+    d.trench = trenchItems(add, C.CIV, S, d.trenchM, PRICES);
   }
   d.days = B.d.days; d.daysTot = B.d.days + (d.trenchM > 0 ? Math.ceil(d.trenchM / 60) : 0);
   d.hTot = B.d.hours; d.months = Math.max(1, Math.ceil(d.daysTot / 21));
@@ -806,6 +956,20 @@ function compute(S, mode, opts) {
     d.ncol = d.ncolLine;               // mono: una fila di pilastri; doppia a T: fila centrale
     d.qsk = qsk(S.snow_zone, S.altitude);
     d.qs = 0.8 * d.qsk;                // μ1·qsk·CE·Ct, CE=Ct=1
+    // vento sulla tettoia: NTC 2018 §3.3 + coefficienti globali di forza per tettoie (Circ. C3.3.8.2 · EN 1991-1-4 §7.3)
+    d.hCp = S.h_cp > 0 ? S.h_cp : 3.5;
+    const numOr = (v, def) => (v === null || v === undefined || v === '' || Number.isNaN(+v)) ? def : +v;
+    d.tiltCp = numOr(S.tilt_cp, 7);
+    d.phiCp = numOr(S.phi_cp, 0.5);
+    d.cpType = S.layout === 'doppia' ? 'duo' : 'mono';
+    d.cpAlpha = d.cpType === 'duo' ? (S.duo_shape === 'v' ? -1 : 1) * Math.abs(d.tiltCp) : Math.abs(d.tiltCp);
+    d.wind = windQp(S.wind_zone || 1, S.altitude, S.exp_cat || 'III', d.hCp, S.ct_topo);
+    d.qp = d.wind.qp;
+    d.cf = canopyCf(d.cpType, d.cpAlpha, d.phiCp);
+    d.qWup = d.qp * Math.abs(d.cf.min);   // kN/m² verso l'alto
+    d.qWdn = d.qp * d.cf.max;             // kN/m² verso il basso
+    d.qEff = Math.max(d.qs, d.qWdn, d.qWup - 0.25);   // carico di riferimento per l'incidenza acciaio (neve o vento)
+    d.windGov = d.qEff > d.qs + 1e-9;
     Aref = d.Acov;
   }
   d.Nmax = Nmax;
@@ -1035,12 +1199,12 @@ function compute(S, mode, opts) {
       if (d.ballastKg > 0) add(C.STR, 'mat_prot', 'Tappetini di protezione guaina sotto zavorre', d.Nmod * 2, 'pz', T.prot, F('prot'));
     }
   } else {
-    d.steelKgm2 = S.steel_kgm2 > 0 ? S.steel_kgm2 : (10 + 9 * d.qs) * (S.layout === 'doppia' ? 1.0 : 1.15);
+    d.steelKgm2 = S.steel_kgm2 > 0 ? S.steel_kgm2 : (10 + 9 * d.qEff) * (S.layout === 'doppia' ? 1.0 : 1.15);
     d.steelKg = d.steelKgm2 * d.Acov;
     d.steelT = d.steelKg / 1000;
     // budget automatico pensilina: 300 €/kWp (fornitura carpenteria + fissaggi, posa e fondazioni escluse) corretto per neve e taglia
     const sizeK = d.Pdc < 200 ? Math.min(1.5, Math.pow(200 / Math.max(d.Pdc, 1), 0.15)) : d.Pdc > 1000 ? 0.92 : 1;
-    const snowK = Math.sqrt(Math.max(d.qs, 0.5) / 1.2);
+    const snowK = Math.sqrt(Math.max(d.qEff, 0.5) / 1.2);
     const autoKwp = 300 * snowK * sizeK;
     const toUnit = (vk) => T.bunit === 'mod' ? vk * M.p / 1000 : T.bunit === 'corpo' ? vk * d.Pdc : T.bunit === 'm2' ? vk * d.Pdc / Math.max(d.Acov, 1) : vk;
     d.stAuto = { kwp: autoKwp, lo: 230 * snowK * sizeK, hi: 400 * snowK * sizeK, unit: toUnit(autoKwp), sizeK, snowK };
@@ -1213,16 +1377,176 @@ function compute(S, mode, opts) {
     d.pitched = !!RTy.pitched;
   }
   if (mode === 'carport') {
-    d.plinthM3 = S.plinth_m3 > 0 ? S.plinth_m3 : (S.layout === 'doppia' ? 2.4 : 3.0) * Math.pow(d.qs / 1.2, 0.7) * (S.span / 5);
-    if (S.found === 'plinto') {
-      add(C.CIV, 'plinth', `Plinto in c.a. C25/30 (scavo, armatura B450C, casseri, getto, rinterro) · ${fx(d.plinthM3, 2)} m³/plinto`, +(d.plinthM3 * d.ncol).toFixed(1), 'm³', P.plinth_m3, { ref: 'NTC 2018 cap. 6' });
-      add(C.CIV, 'soil', 'Trasporto e conferimento terre di scavo', +(d.plinthM3 * d.ncol * 1.25).toFixed(1), 'm³', P.soil, { ref: 'DPR 120/2017' });
+    /* ---- azioni al piede del pilastro corrente (vento + neve + permanenti) ---- */
+    const D = S.cov_depth, sp = S.span, ca = Math.cos(d.tiltCp * Math.PI / 180), sa = Math.sin(Math.abs(d.tiltCp) * Math.PI / 180);
+    const Aw = sp * D;                                   // area in pianta di una falda per pilastro
+    const modKgm2 = d.Acov > 0 ? d.Nmod * M.kg / d.Acov : 0;
+    d.gk = (d.steelKgm2 + modKgm2 + (S.cover === 'lamiera' ? 7 : 0)) * 9.81 / 1000;   // kN/m²
+    const Gw = d.gk * Aw, Qs = d.qs * Aw, U = d.qWup * Aw / ca, Pw = d.qWdn * Aw / ca;
+    const Hc = d.qp * 2.0 * 0.30 * d.hCp;                // trascinamento sul pilastro (cf 2,0 · b 0,30 m)
+    const Hw = (Fn) => Math.abs(Fn) * sa + 0.02 * d.qp * Aw * d.wings + Hc;   // componente orizzontale + attrito (cfr 0,02)
+    const z = d.hCp, cases = [];
+    const G = (x) => ({ Fz: Gw, x, t: 'G' }), Q = (Fz, x) => ({ Fz, x, t: 'Q' });
+    if (d.cpType === 'duo') {
+      const xr = D / 2, xl = -D / 2, xw = 0.75 * D, xlw = -0.25 * D;   // vento da +x: risultante a d/4 dal bordo sopravvento di ogni falda
+      const g2 = [G(xr), G(xl)];
+      cases.push({ n: 'Vento in depressione su entrambe le falde', loads: g2.concat([Q(-U, xw), Q(-U, xlw)]), H: Hw(2 * U), zH: z });
+      cases.push({ n: 'Vento in depressione sulla falda sopravvento', loads: g2.concat([Q(-U, xw)]), H: Hw(U), zH: z });
+      cases.push({ n: 'Vento in depressione sulla falda sottovento', loads: g2.concat([Q(-U, xlw)]), H: Hw(U), zH: z });
+      cases.push({ n: 'Vento in pressione sulla falda sopravvento + neve ψ0', loads: g2.concat([Q(Pw, xw), Q(0.5 * Qs, xr)]), H: Hw(Pw), zH: z });
+      cases.push({ n: 'Neve su una sola falda + vento ψ0', loads: g2.concat([Q(Qs, xr), Q(0.6 * Pw, xw)]), H: 0.6 * Hw(Pw), zH: z });
+      cases.push({ n: 'Neve su entrambe le falde + vento ψ0', loads: g2.concat([Q(Qs, xr), Q(Qs, xl), Q(0.6 * Pw, xw), Q(0.6 * Pw, xlw)]), H: 0.6 * Hw(2 * Pw), zH: z });
     } else {
-      add(C.CIV, 'micropile', 'Micropali Ø 200 mm (2 per pilastro, L 6 m) con cordolo di testa', d.ncol * 12, 'm', P.micropile_m, { ref: 'NTC 2018 §6.4' });
+      const e = Math.max(0, Math.min(S.cov_depth, +S.col_off >= 0 && S.col_off !== '' && S.col_off != null ? +S.col_off : 0.5));           // distanza pilastro dal bordo posteriore
+      const xc = D / 2 - e, xf = 0.75 * D - e, xb = 0.25 * D - e;
+      const g1 = [G(xc)];
+      cases.push({ n: 'Vento in depressione, da fronte', loads: g1.concat([Q(-U, xf)]), H: Hw(U), zH: z });
+      cases.push({ n: 'Vento in depressione, da retro', loads: g1.concat([Q(-U, xb)]), H: Hw(U), zH: z });
+      cases.push({ n: 'Vento in pressione da fronte + neve ψ0', loads: g1.concat([Q(Pw, xf), Q(0.5 * Qs, xc)]), H: Hw(Pw), zH: z });
+      cases.push({ n: 'Vento in pressione da retro + neve ψ0', loads: g1.concat([Q(Pw, xb), Q(0.5 * Qs, xc)]), H: Hw(Pw), zH: z });
+      cases.push({ n: 'Neve + vento ψ0', loads: g1.concat([Q(Qs, xc), Q(0.6 * Pw, xf)]), H: 0.6 * Hw(Pw), zH: z });
+      d.colOff = e;
     }
-    add(C.CIV, 'anchor_kit', 'Tirafondi, piastre di base e inghisaggi', d.ncol, 'pz', P.anchor_kit, { mat: true });
-    add(C.CIV, 'asphalt', 'Taglio, demolizione e ripristino pavimentazione bituminosa attorno ai plinti', d.ncol * 8, 'm²', P.asphalt);
-    add(C.CIV, 'geo', 'Indagine e relazione geologica-geotecnica', 1, 'a corpo', P.geo, { ref: 'NTC 2018 §6.2.2' });
+    // sollecitazioni di progetto al piede (SLU STR, γG 1,3/1,0 · γQ 1,5) per plinti e micropali
+    d.baseAct = cases.reduce((a, cs) => {
+      let N = 0, Nmin = 0, Mx = 0;
+      for (const f of cs.loads) {
+        const gmax = f.t === 'G' ? 1.3 : (f.Fz > 0 ? 1.5 : 0), gmin = f.t === 'G' ? 1.0 : (f.Fz < 0 ? 1.5 : 0);
+        N += gmax * f.Fz; Nmin += gmin * f.Fz; Mx += (f.Fz * f.x) * (f.t === 'G' ? 1.3 : 1.5);
+      }
+      const M = Math.abs(Mx) + 1.5 * cs.H * cs.zH;
+      return { Nmax: Math.max(a.Nmax, N), Nmin: Math.min(a.Nmin, Nmin), M: Math.max(a.M, M), H: Math.max(a.H, 1.5 * cs.H) };
+    }, { Nmax: 0, Nmin: Infinity, M: 0, H: 0 });
+    d.windCases = cases.map((c) => c.n);
+    /* ---- dimensionamento zavorra a puro equilibrio (blocco appoggiato) ---- */
+    const blk = { h: S.blk_h > 0 ? S.blk_h : 0.8, gam: S.blk_gam > 0 ? S.blk_gam : 24, mu: S.blk_mu > 0 ? S.blk_mu : 0.5, padm: S.p_adm > 0 ? S.p_adm : 150, Gcol: 0 };
+    const sizeB = (B) => ballastCheck(cases, Object.assign({}, blk, { B, L: S.blk_l > 0 ? S.blk_l : B }));
+    let B = 0, res = null;
+    if (S.blk_b > 0) { B = S.blk_b; res = sizeB(B); }
+    else { for (let b = 0.8; b <= 6.001; b += 0.05) { const r = sizeB(b); if (r.ok) { B = Math.round(b * 100) / 100; res = r; break; } } if (!res) { B = 6; res = sizeB(6); } }
+    const Lb = S.blk_l > 0 ? S.blk_l : B;
+    d.blk = { B, L: Lb, h: blk.h, m3: B * Lb * blk.h, t: B * Lb * blk.h * blk.gam / 9.81, ok: res.ok, eqU: res.eqU, sl: res.sl, sig: res.sig, padm: blk.padm, mu: blk.mu, manual: S.blk_b > 0 };
+    d.blk.tTot = d.blk.t * d.ncol;
+    // plinto interrato: stima empirica da neve, non meno del 70% della massa di equilibrio (il resto da ricoprimento e spinta laterale)
+    d.plinthEmp = (S.layout === 'doppia' ? 2.4 : 3.0) * Math.pow(d.qs / 1.2, 0.7) * (S.span / 5);
+    d.plinthWind = 0.7 * d.blk.t / 2.5;
+    d.plinthM3 = S.plinth_m3 > 0 ? S.plinth_m3 : Math.max(d.plinthEmp, d.plinthWind);
+    d.plinthT = d.plinthM3 * 2.5;
+    if (S.found === 'zavorra') {
+      const nb = d.ncol, perTrip = Math.max(1, Math.floor(24 / Math.max(d.blk.t, 0.1)));
+      d.blkTrips = Math.ceil(nb / perTrip);
+      d.blkCraneDays = Math.max(1, Math.ceil(nb / 12));
+      add(C.CIV, 'ballast_blk', `Blocchi di zavorra prefabbricati in c.a. C25/30 con inserti di ancoraggio e golfari · ${fx(B, 2)} × ${fx(Lb, 2)} × ${fx(blk.h, 2)} m (${fx(d.blk.t, 1)} t/blocco)`, +(d.blk.m3 * nb).toFixed(1), 'm³', P.ballast_m3, { mat: true, ref: 'NTC 2018 §2.6.1 (EQU) · §6.4.2' });
+      add(C.CIV, 'ballast_tr', `Trasporto blocchi con autoarticolato (24 t/viaggio, ${perTrip} blocchi/viaggio)`, d.blkTrips, 'viaggio', P.ballast_tr);
+      add(C.CIV, 'ballast_bed', 'Preparazione del piano di posa: pulizia, regolarizzazione e letto di malta/misto cementato sotto i blocchi', Math.round(B * Lb * 1.1 * nb), 'm²', P.ballast_bed);
+      add(C.CIV, 'plate_test', 'Prove di carico su piastra del sottofondo (portanza e cedimenti del piano di posa)', Math.max(2, Math.ceil(nb / 15)), 'pz', P.plate_test, { ref: 'NTC 2018 §6.2.2 · CNR B.U. 146' });
+    } else if (S.found === 'plinto') {
+      add(C.CIV, 'plinth', `Plinto in c.a. C25/30: scavo, magrone, getto, casseri, armatura B450C 70 kg/m³, rinterro · ${fx(d.plinthM3, 2)} m³/plinto`, +(d.plinthM3 * d.ncol).toFixed(1), 'm³', P.plinth_m3, { ref: 'NTC 2018 cap. 6 · media prezzari Piemonte, Lombardia, Emilia-R., VdA al netto di SG e utile' });
+      add(C.CIV, 'soil', 'Trasporto e conferimento terre di scavo', +(d.plinthM3 * d.ncol * 1.25).toFixed(1), 'm³', P.soil, { ref: 'DPR 120/2017' });
+    } else if (S.found === 'micropali') {
+      /* micropali iniettati (IGU) sotto cordolo di testa: n su due file a interasse s trasversale alla fila */
+      const soil = MP_SOILS[S.mp_soil] || MP_SOILS.sabbia;
+      const dPerf = (S.mp_d > 0 ? S.mp_d : 200) / 1000, alpha = 1.2, s0 = S.mp_s > 0 ? S.mp_s : 1.2;
+      const xi = 1.70, gT = 1.25, gC = 1.15;                    // NTC 2018 Tab. 6.4.IV (1 verticale) e 6.4.II (R3)
+      const capOf = (n, s) => { const b = s + 0.6, l = n > 2 ? s + 0.6 : 0.8, h = 0.7; return { b, l, h, V: b * l * h }; };
+      let best = null;
+      for (const n of (S.mp_n > 0 ? [S.mp_n] : [2, 4])) {
+        const cap = capOf(n, s0);
+        const gf = groupForces(cases, n, s0, cap.h, 25 * cap.V);
+        const perM = Math.PI * alpha * dPerf * soil.qs;          // kN per m di bulbo
+        const Lt = gf.T > 0 ? gf.T * xi * gT / perM : 0, Lc = gf.C * xi * gC / perM;
+        let L = S.mp_L > 0 ? S.mp_L : Math.max(4, Math.ceil((Math.max(Lt, Lc) + 1.0) * 2) / 2);   // +1 m di tratto superiore non collaborante
+        const Nmax = Math.max(gf.T, gf.C);
+        const tube = MP_TUBES.find((t) => t.A * 355 / 1.05 / 1000 >= Nmax * 1.5) || MP_TUBES[MP_TUBES.length - 1];   // margine 1,5 per instabilità, corrosione e giunti
+        const R = { n, s: s0, cap, T: gf.T, C: gf.C, L, Lreq: Math.max(Lt, Lc) + 1, tube, perM, ok: (S.mp_L > 0 ? (S.mp_L - 1) * perM / xi / gT >= gf.T && (S.mp_L - 1) * perM / xi / gC >= gf.C : L <= 15) && tube.A * 355 / 1.05 / 1000 >= Nmax };
+        R.cost = n * L * (P.mp_drill + tube.kg * P.mp_tube + P.mp_grout) + cap.V * P.mp_cap;
+        if (!best || (R.ok && !best.ok) || (R.ok === best.ok && R.cost < best.cost)) best = R;
+      }
+      d.mp = best; d.mp.soil = soil; d.mp.np = best.n * d.ncol; d.mp.totM = best.n * best.L * d.ncol;
+      // prove di collaudo: NTC 2018 §6.4.3.7.2 (n. pali ≤20 → 1, ≤50 → 2, ≤100 → 3, ≤200 → 7, ≤500 → 8, oltre → 10)
+      const np = d.mp.np; d.mp.tests = np <= 20 ? 1 : np <= 50 ? 2 : np <= 100 ? 3 : np <= 200 ? 7 : np <= 500 ? 8 : 10;
+      add(C.CIV, 'mp_mob', 'Trasporto, installazione e rimozione della sonda di perforazione e dell\'impianto di iniezione', 1, 'a corpo', P.mp_mob, { ref: 'voce di impianto cantiere esclusa dai prezzi unitari dei micropali' });
+      add(C.CIV, 'mp_drill', `Perforazione a rotopercussione Ø ${Math.round(dPerf * 1000)} mm per micropali, ${best.n} per pilastro, L ${fx(best.L, 1)} m, con smaltimento del materiale di risulta`, +d.mp.totM.toFixed(1), 'm', P.mp_drill, { ref: 'cfr. Prezzario FVG 17.3.EQ4.02.D' });
+      add(C.CIV, 'mp_tube', `Armatura tubolare S355 ${best.tube.n} mm valvolata, giunti filettati (${fx(best.tube.kg, 1)} kg/m)`, Math.round(d.mp.totM * best.tube.kg), 'kg', P.mp_tube, { mat: true, ref: 'cfr. Prezzario FVG 17.3.EQ4.05' });
+      add(C.CIV, 'mp_grout', 'Iniezione di miscela cementizia a bassa pressione (IGU), riempimento e guaina', +d.mp.totM.toFixed(1), 'm', P.mp_grout);
+      add(C.CIV, 'mp_cap', `Cordolo di collegamento in c.a. sulla testa dei micropali ${fx(best.cap.b, 2)} × ${fx(best.cap.l, 2)} × ${fx(best.cap.h, 2)} m (scavo, getto, casseri, armatura)`, +(best.cap.V * d.ncol).toFixed(2), 'm³', P.mp_cap, { ref: 'come plinto in c.a.' });
+      add(C.CIV, 'soil', 'Trasporto e conferimento terre di scavo dei cordoli', +(best.cap.V * d.ncol * 1.25).toFixed(1), 'm³', P.soil, { ref: 'DPR 120/2017' });
+      add(C.CIV, 'mp_test', 'Prova di carico di collaudo su micropalo (contrasto, martinetto, rilievo cedimenti, relazione)', d.mp.tests, 'pz', P.mp_test, { ref: 'NTC 2018 §6.4.3.7.2' });
+    } else if (S.found === 'ancoraggio') {
+      /* ancoraggio a staffe e tasselli chimici su soletta o plinto esistente */
+      const base = S.anc_base === 'plinto' ? 'plinto' : 'soletta';
+      // piastra e tasselli: forze nelle due file (braccio = lato piastra − 0,10 m); scelta della combinazione più economica verificata
+      const plates = S.anc_plate > 0 ? [S.anc_plate] : [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2];
+      let pick = null;
+      for (const pb of plates) for (const sz of ANCH_SIZES) for (const n of [4, 6, 8, 10, 12]) {
+        if ((n / 2 - 1) * 1.5 * sz.hef / 1000 > pb - 0.1) continue;   // interasse minimo ~1,5 h_ef tra tasselli della stessa fila (ipotesi)
+        const z = Math.max(0.2, pb - 0.1), gf = groupForces(cases, n, z, 0, 0);
+        const c = n * P[sz.P] + P.anch_plate * Math.pow(pb / 0.5, 2);
+        const ok = gf.T <= sz.NRd;
+        if (!pick || (ok && !pick.ok) || (ok === pick.ok && (ok ? c < pick.c : gf.T / sz.NRd < pick.Tb / pick.sz.NRd))) pick = { sz, n, Tb: Math.max(0, gf.T), c, ok, pb, z };
+      }
+      if (!pick) pick = { sz: ANCH_SIZES[2], n: 4, Tb: Infinity, c: 4 * P.anch_m24 + P.anch_plate, ok: false, pb: plates[plates.length - 1], z: plates[plates.length - 1] - 0.1 };
+      pick.fail = !pick.ok;
+      const plB = pick.pb, zA = pick.z;
+      let el;
+      if (base === 'soletta') {
+        const t = S.slab_t > 0 ? S.slab_t : 0.20, panel = S.slab_panel > 0 ? S.slab_panel : 5;
+        const beff = Math.min(panel, plB + 2 * 4 * t);           // porzione di soletta che collabora: diffusione 1:4 dello spessore (ipotesi)
+        el = { B: beff, L: beff, h: t, t, panel };
+      } else {
+        el = { B: S.anc_pl_b > 0 ? S.anc_pl_b : 1.5, L: S.anc_pl_l > 0 ? S.anc_pl_l : (S.anc_pl_b > 0 ? S.anc_pl_b : 1.5), h: S.anc_pl_h > 0 ? S.anc_pl_h : 0.8 };
+      }
+      const eq = ballastCheck(cases, { B: el.B, L: el.L, h: el.h, gam: 25, mu: S.blk_mu > 0 ? S.blk_mu : 0.5, padm: S.p_adm > 0 ? S.p_adm : 150, Gcol: 0 });
+      el.W = eq.W; el.t_ = eq.W / 9.81; el.eq = eq;
+      d.anc = { base, el, plB, zA, pick, ok: eq.ok && !pick.fail, needT: d.blk.t };
+      add(C.CIV, 'anch_plate', `Piastra di base maggiorata ${Math.round(plB * 1000)} × ${Math.round(plB * 1000)} mm con costole, livellamento e malta antiritiro sotto piastra`, d.ncol, 'pz', +(P.anch_plate * Math.pow(plB / 0.5, 2)).toFixed(2), { mat: true });
+      add(C.CIV, 'anch_bolt', `Ancorante chimico ${pick.sz.n} classe 8.8, h<sub>ef</sub> ${pick.sz.hef} mm, resina vinilestere: foratura, pulizia foro, posa (${pick.n} per pilastro)`.replace(/<[^>]+>/g, ''), pick.n * d.ncol, 'pz', P[pick.sz.P], { mat: true, ref: 'EN 1992-4 · ETA del prodotto' });
+      add(C.CIV, 'slab_survey', base === 'soletta' ? 'Indagine sulla soletta esistente: rilievo spessori e giunti, pacometria armature, relazione di idoneità' : 'Indagine sui plinti esistenti: saggi, rilievo geometria e armature, relazione di idoneità', 1, 'a corpo', P.slab_survey, { ref: 'NTC 2018 cap. 8' });
+      add(C.CIV, 'slab_core', 'Carotaggio Ø 100 mm e prova di compressione in laboratorio', Math.max(3, Math.ceil(d.ncol / 8)), 'pz', P.slab_core, { ref: 'NTC 2018 §8.5.3 · UNI EN 12504-1' });
+      add(C.CIV, 'pull_test', 'Prova di estrazione in sito su ancorante (non distruttiva, a carico di prova)', Math.max(3, Math.ceil(pick.n * d.ncol * 0.05)), 'pz', P.pull_test, { ref: 'EN 1992-4 · linee guida ETAG/EAD' });
+    }
+    if (S.found !== 'ancoraggio') add(C.CIV, 'anchor_kit', S.found === 'zavorra' ? 'Piastre di base, bulloneria su inserti annegati nel blocco, livellamento' : 'Tirafondi, piastre di base e inghisaggi', d.ncol, 'pz', P.anchor_kit, { mat: true });
+    if (S.found === 'plinto' || S.found === 'micropali') add(C.CIV, 'asphalt', `Demolizione in traccia, binder 8 cm e tappeto 3 cm attorno ${S.found === 'micropali' ? 'ai cordoli' : 'ai plinti'} (taglio, discarica, ripristino a mano a rappezzi)`, S.found === 'micropali' ? Math.round((d.mp.cap.b + 0.6) * (d.mp.cap.l + 0.6) * d.ncol) : d.ncol * 8, 'm²', P.asphalt, { ref: 'cfr. Prezzario FVG 2025 12.8.BS1.01 · 12.3.YS5.04 · 12.4.YS5.01' });
+    {
+      const W = d.wind, Z = WIND_ZONES[W.zone];
+      chk('info', 'Azione del vento sulla pensilina', `Zona ${W.zone}, ${S.altitude} m s.l.m.: v<sub>b</sub> = ${fx(W.vb, 1)} m/s, q<sub>b</sub> = ${fx(W.qb, 3)} kN/m²; categoria ${W.cat}, z = ${fx(W.z, 1)} m: c<sub>e</sub> = ${fx(W.ce, 2)}, q<sub>p</sub> = ${fx(d.qp, 3)} kN/m². Tettoia ${d.cpType === 'duo' ? 'a doppia falda' : 'a semplice falda'} α = ${fx(d.cpAlpha, 0)}°, φ = ${fx(d.phiCp, 2)}: c<sub>f</sub> = +${fx(d.cf.max, 2)} / ${fx(d.cf.min, 2)} → pressione ${fx(d.qWdn, 2)}, depressione ${fx(d.qWup, 2)} kN/m².`, 'NTC 2018 §3.3 · Circ. 7/2019 C3.3.8.2 · EN 1991-1-4 §7.3');
+      if (d.windGov) chk('warn', 'Il vento governa la struttura, non la neve', `Depressione netta ${fx(d.qWup - 0.25, 2)} kN/m² > neve ${fx(d.qs, 2)} kN/m²: l'incidenza acciaio è stimata sul vento (${fx(d.steelKgm2, 1)} kg/m²). Arcarecci e travi lavorano anche a inversione di segno.`, 'NTC 2018 §2.5.3');
+      const ba = d.baseAct;
+      chk('info', 'Azioni di progetto al piede del pilastro corrente', `SLU: N<sub>max</sub> = ${fx(ba.Nmax, 1)} kN, N<sub>min</sub> = ${fx(ba.Nmin, 1)} kN${ba.Nmin < 0 ? ' (trazione: il pilastro tende a sollevarsi)' : ''}, M = ${fx(ba.M, 1)} kNm, H = ${fx(ba.H, 1)} kN. Area per pilastro ${fx(sp * D * d.wings, 1)} m², g<sub>k</sub> ${fx(d.gk, 2)} kN/m².`, 'NTC 2018 §2.5.3 · §2.6.1');
+      const b = d.blk;
+      if (S.found === 'micropali' && d.mp) {
+        const m = d.mp;
+        chk(m.ok ? 'ok' : 'err', m.ok ? 'Micropali predimensionati' : 'Micropali NON verificati', `${m.n} micropali per pilastro Ø ${S.mp_d > 0 ? S.mp_d : 200} mm, interasse ${fx(m.s, 2)} m, L ${fx(m.L, 1)} m${S.mp_L > 0 ? ' (inserita)' : ''} in ${m.soil.n} (q<sub>s</sub> ${m.soil.qs} kPa, α 1,2): trazione di progetto ${fx(m.T, 1)} kN, compressione ${fx(m.C, 1)} kN per palo; resistenza per metro di bulbo ${fx(m.perM / 1.70 / 1.25, 1)} kN/m a trazione (ξ 1,70 · γ 1,25). Armatura ${m.tube.n} S355. Totale ${m.np} pali, ${fx(m.totM, 0)} m, ${m.tests} prove di collaudo.`, 'NTC 2018 §6.4.3 · Tab. 6.4.II e 6.4.IV');
+        if (!m.ok && m.L > 15) chk('warn', 'Micropali troppo lunghi', 'Oltre 15 m conviene aumentare il numero di pali, l\'interasse del cordolo o passare a iniezioni ripetute (IRS), da concordare con il geotecnico.', 'NTC 2018 §6.4.3');
+        if (S.mp_soil === 'riporto') chk('warn', 'Bulbo nei riporti', 'L\'attrito nei riporti è incerto: la lunghezza va presa sotto il riporto, con stratigrafia da sondaggio.', 'NTC 2018 §6.2.2');
+        if (d.baseAct.H / m.n > 15) chk('warn', 'Azione orizzontale elevata sui micropali', `${fx(d.baseAct.H / m.n, 1)} kN per palo: valutare pali inclinati o il contributo laterale del cordolo.`, 'NTC 2018 §6.4.3.1.2');
+        chk('info', 'Ordine di grandezza', `Costo pali e cordolo ≈ ${fx(m.cost, 0)} € a pilastro, più ${fx(P.mp_mob, 0)} € di impianto sonda e le prove: i micropali si giustificano con terreni scadenti, falda, riporti o carichi alti, non per prezzo.`, '');
+      }
+      if (S.found === 'ancoraggio' && d.anc) {
+        const a = d.anc, el = a.el, eq = el.eq;
+        const what = a.base === 'soletta' ? `porzione di soletta collaborante ${fx(el.B, 2)} × ${fx(el.L, 2)} m (spessore ${fx(el.t, 2)} m, riquadri ${fx(el.panel, 1)} m)` : `plinto esistente ${fx(el.B, 2)} × ${fx(el.L, 2)} × ${fx(el.h, 2)} m`;
+        chk(eq.ok ? 'ok' : 'err', eq.ok ? 'Ancoraggio: equilibrio verificato' : 'Ancoraggio NON verificato: il supporto esistente non basta', `${what}: peso ${fx(el.t_, 1)} t contro ${fx(a.needT, 1)} t di massa di equilibrio richiesta (margine EQU ${fx(eq.eqU, 1)} kNm, scorrimento ${fx(eq.sl, 1)} kN).${eq.ok ? '' : ' Servono un plinto, una zavorra, micropali o un ispessimento locale della soletta: con il solo fissaggio la pensilina si ribalta.'}`, 'NTC 2018 Tab. 2.6.I (EQU) · cap. 8');
+        chk(a.pick.fail ? 'err' : 'ok', a.pick.fail ? 'Tasselli insufficienti' : 'Tasselli predimensionati', `${a.pick.n} × ${a.pick.sz.n} (h<sub>ef</sub> ${a.pick.sz.hef} mm) su piastra ${Math.round(a.plB * 1000)} mm, braccio ${fx(a.zA, 2)} m: trazione di progetto ${fx(a.pick.Tb, 1)} kN per tassello su ${a.pick.sz.NRd} kN ammessi (valore indicativo in cls C25/30 fessurato).${a.pick.fail ? ' Allargare la piastra o usare tirafondi passanti con contropiastra.' : ''}`, 'EN 1992-4 · ETA');
+        chk('info', 'Da verificare sul supporto esistente', a.base === 'soletta' ? 'Classe reale del calcestruzzo (carote), spessore, armatura e giunti; punzonamento e flessione della soletta attorno alla piastra; distanza dai bordi e dai giunti (≥ 1,5 h<sub>ef</sub>). La collaborazione 1:4 dello spessore è un\'ipotesi di predimensionamento.' : 'Geometria e armatura del plinto (saggi), distanza dei tasselli dai bordi, compatibilità con la struttura che il plinto già porta.', 'NTC 2018 cap. 8 · EN 1992-4');
+      }
+      if (S.found === 'zavorra') {
+        const enc = d.cpType === 'duo' ? b.B / 2 : (d.colOff || 0) + b.B / 2;
+        chk(b.ok ? 'ok' : 'err', b.ok ? 'Zavorra verificata a ribaltamento, scorrimento e pressione sul piano di posa' : 'Zavorra NON verificata', `${d.ncol} blocchi ${fx(b.B, 2)} × ${fx(b.L, 2)} × ${fx(b.h, 2)} m = ${fx(b.m3, 2)} m³, ${fx(b.t, 1)} t ciascuno (${fx(b.tTot, 0)} t totali). Margine EQU ${fx(b.eqU, 1)} kNm, scorrimento ${fx(b.sl, 1)} kN (μ = ${fx(b.mu, 2)}), σ<sub>max</sub> = ${b.sig === Infinity ? 'parzializzata oltre il nocciolo' : fx(b.sig, 0) + ' kPa'} su ${fx(b.padm, 0)} kPa ammessi.${b.manual ? ' Dimensioni inserite a mano.' : ''}`, 'NTC 2018 Tab. 2.6.I (EQU) · §6.4.2');
+        if (b.t > 25) chk('err', 'Blocco oltre il trasportabile in un pezzo', `${fx(b.t, 1)} t per blocco: oltre 24–25 t servono trasporti eccezionali e autogru pesanti. Dividere in due elementi collegati o passare a plinto/micropali.`, 'Codice della strada art. 10');
+        else if (b.t > 12) chk('warn', 'Blocchi pesanti', `${fx(b.t, 1)} t per blocco: autogru di classe ≥ 70–100 t con stabilizzatori sul piazzale; verificare il piano di stazionamento e le reti interrate.`, 'D.Lgs. 81/08 All. VI');
+        if (enc > 0.6) chk('warn', 'Il blocco invade gli stalli', `Il blocco sporge ${fx(enc, 2)} m dall'asse dei pilastri${d.cpType === 'duo' ? ' su ciascun lato' : ''} ed è alto ${fx(b.h, 2)} m: con stalli da 5 m restano ~${fx(5 - enc, 2)} m utili. Valutare stalli più profondi, blocco allungato lungo la fila (campo "Lato lungo la fila") o pensilina monofalda con pilastro arretrato.`, '');
+        chk('info', 'Piano di posa da verificare', `La zavorra appoggiata scarica ${fx(b.sig === Infinity ? 0 : b.sig, 0)} kPa sulla pavimentazione: servono prove su piastra e, sotto asfalto, la verifica che il pacchetto non ceda nel tempo (cedimenti differenziali tra blocchi). La relazione geotecnica resta obbligatoria anche senza scavo.`, 'NTC 2018 §6.2.2 · §6.4.2');
+        const cBall = b.m3 * d.ncol * P.ballast_m3 + d.blkTrips * P.ballast_tr + d.blkCraneDays * (b.t > 10 ? P.crane_heavy : P.crane) + b.B * b.L * 1.1 * d.ncol * P.ballast_bed;
+        const cPl = d.plinthM3 * d.ncol * (P.plinth_m3 + 1.25 * P.soil) + d.ncol * 8 * P.asphalt + Math.ceil(d.ncol / 6) * P.excav;
+        chk('info', 'Confronto di massima con i plinti', `Zavorre ≈ ${fx(cBall, 0)} € contro plinti ≈ ${fx(cPl, 0)} € (${fx(d.plinthM3, 2)} m³/plinto, prezzi di default). La zavorra conviene quando lo scavo è vietato o costoso (sottoservizi, terreni contaminati, impermeabilizzazioni, cantiere breve); altrimenti il plinto è quasi sempre più economico.`, '');
+      } else if (S.found !== 'ancoraggio') {
+        chk('info', 'Zavorra equivalente a puro equilibrio', `Un blocco appoggiato dovrebbe pesare ${fx(b.t, 1)} t (${fx(b.B, 2)} × ${fx(b.L, 2)} × ${fx(b.h, 2)} m). ${S.found === 'plinto' ? `Il plinto pesa ~${fx(d.plinthT, 1)} t: ${d.plinthT >= b.t ? 'coerente anche senza contributo del terreno.' : 'il resto va affidato al terreno di ricoprimento e alla spinta laterale, da verificare.'}` : 'Per i micropali il valore serve a capire l\'ordine di grandezza del tiro: N<sub>min</sub> e M al piede vanno ai pali.'}`, 'NTC 2018 §6.4');
+        if (S.found === 'plinto' && d.plinthT < 0.6 * b.t) chk('warn', 'Plinto probabilmente sottodimensionato al vento', `Il volume inserito (${fx(d.plinthM3, 2)} m³) è inferiore al 60% della massa di equilibrio: aumentarlo o chiedere il dato allo strutturista.`, 'NTC 2018 §6.4.2');
+        else if (S.found === 'plinto' && !(S.plinth_m3 > 0) && d.plinthWind > d.plinthEmp) chk('info', 'Plinto dimensionato dal vento', `Volume automatico ${fx(d.plinthM3, 2)} m³: il vento (70% della massa di equilibrio) supera la stima da neve (${fx(d.plinthEmp, 2)} m³).`, 'NTC 2018 §6.4.2');
+      }
+      chk('info', 'Valori di predimensionamento', 'Vento, neve, acciaio e fondazioni sono calcolati sul pilastro corrente per il preventivo. Il progetto esecutivo (combinazioni complete, coefficienti locali c<sub>p,net</sub>, effetti dinamici, sisma, pilastri di testata) resta dello strutturista.', 'DPR 380/2001 art. 64');
+    }
+    if (S.found !== 'ancoraggio') add(C.CIV, 'geo', 'Indagine e relazione geologica-geotecnica', 1, 'a corpo', P.geo, { ref: 'NTC 2018 §6.2.2' });
     add(C.CIV, 'bumper', 'Paracolpi di protezione pilastri', d.ncol, 'pz', P.bumper, { mat: true });
     add(C.CIV, 'marking', 'Ripristino segnaletica orizzontale stalli', d.stalls, 'stallo', P.marking);
     if (S.led) add(C.CIV, 'led', 'Illuminazione LED sotto pensilina IP66 (1 ogni 2 stalli, cablata)', Math.ceil(d.stalls / 2), 'pz', P.led, { mat: true, ref: 'UNI EN 12464-2' });
@@ -1232,12 +1556,7 @@ function compute(S, mode, opts) {
   const CIVG = 'Opere civili e fondazioni';
   d.trenchM = S.trench_m > 0 ? S.trench_m : 0;
   if (d.trenchM > 0) {
-    const surf = S.trench_surf || 'asfalto';
-    add(CIVG, 'trench', 'Scavo a sezione obbligata 0,4 × 0,8 m, cavidotto con 2 corrugati Ø125, nastro segnalatore, rinterro e conferimento eccedenze', d.trenchM, 'm', P.trench, { ref: 'CEI 11-17 · DPR 120/2017' });
-    add(CIVG, 'pit', 'Pozzetti di ispezione con chiusino carrabile D400 (1 ogni 25 m e ai cambi di direzione)', Math.ceil(d.trenchM / 25) + 1, 'pz', P.pit);
-    if (surf === 'asfalto') add(CIVG, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione bituminosa lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.asphalt);
-    else if (surf === 'cls') add(CIVG, 'trench_rip', 'Taglio, demolizione e ripristino pavimentazione industriale in calcestruzzo lungo lo scavo', Math.round(d.trenchM * 0.6), 'm²', P.trench_cls);
-    if (S.trench_cross > 0) add(CIVG, 'trench_x', 'Attraversamenti (sottoservizi, strade interne) con spingitubo o scavo a mano', S.trench_cross, 'cad', P.trench_x);
+    d.trench = trenchItems(add, CIVG, S, d.trenchM, P);
   }
   // rinforzi strutturali e opere edili accessorie all'installazione (solo copertura)
   if (mode === 'roof') {
@@ -1286,7 +1605,7 @@ function compute(S, mode, opts) {
   d.hSteel = mode === 'carport' ? (d.mdoManual && S.h_steel > 0 ? S.h_steel : steelAuto) : 0;
   const crewH = S.team * S.h_day;
   d.days = Math.max(1, Math.ceil(d.hTot / crewH)) + (mode === 'carport' ? Math.ceil(d.hSteel / (S.team * S.h_day)) : 0);
-  d.daysCivil = mode === 'carport' ? Math.ceil(d.ncol / 6) + 2 : 0;
+  d.daysCivil = mode === 'carport' ? (S.found === 'zavorra' ? d.blkCraneDays + 1 : S.found === 'ancoraggio' ? Math.ceil(d.ncol / 10) + 1 : S.found === 'micropali' ? Math.ceil((d.mp ? d.mp.np : d.ncol * 2) / 10) + Math.ceil(d.ncol / 8) + 2 : Math.ceil(d.ncol / 6) + 2) : 0;
   d.daysTot = d.days + d.daysCivil + (d.bess ? d.bess.days : 0) + (mode === 'roof' ? (d.asbDays || 0) + (d.redoM2 > 0 ? Math.ceil(d.redoM2 / 400) : 0) + (d.skyNew > 0 ? Math.ceil(d.skyNew / 80) : 0) + Math.ceil((d.reinfKg || 0) / 500 + (d.reinfFrp || 0) / 40) + (d.trenchM > 0 ? Math.ceil(d.trenchM / 60) : 0) : 0);
   d.months = Math.max(1, Math.ceil(d.daysTot / 21));
 
@@ -1325,7 +1644,8 @@ function compute(S, mode, opts) {
     add(C.NOL, 'crane', 'Autogru per montaggio carpenteria (~8 t/giorno)', S.crane_days > 0 ? S.crane_days : d.craneDaysAuto, 'gg', P.crane);
     add(C.NOL, 'telehandler', 'Sollevatore telescopico per movimentazione moduli', S.tele_days > 0 ? S.tele_days : d.teleDaysAuto, 'gg', P.telehandler);
     if (S.ple !== false) { add(C.NOL, 'ple', 'Piattaforma di lavoro elevabile (PLE)', S.ple_days > 0 ? S.ple_days : d.pleDaysAuto, 'gg', P.ple); add(C.NOL, 'ple_tr', 'Trasporto PLE A/R', 1, 'a corpo', P.ple_tr); }
-    if (S.found === 'plinto') add(C.NOL, 'excav', 'Escavatore 3,5 t con operatore', S.excav_days > 0 ? S.excav_days : d.excavDaysAuto, 'gg', P.excav);
+    if (S.found === 'zavorra') add(C.NOL, 'crane_blk', `Autogru per scarico e posa blocchi di zavorra (~12 blocchi/giorno${d.blk.t > 10 ? ', classe ≥ 70 t per blocchi oltre 10 t' : ''})`, d.blkCraneDays, 'gg', d.blk.t > 10 ? P.crane_heavy : P.crane);
+    if (S.found === 'plinto' || S.found === 'micropali') add(C.NOL, 'excav', 'Escavatore 3,5 t con operatore' + (S.found === 'micropali' ? ' per i cordoli' : ''), S.excav_days > 0 ? S.excav_days : (S.found === 'micropali' ? Math.ceil(d.ncol / 8) : d.excavDaysAuto), 'gg', P.excav);
   }
 
   /* ---- Sicurezza ---- */
@@ -1518,15 +1838,15 @@ const SITE_CAT = {
 const CAT_ORDER_ALL = ['Moduli e ottimizzatori', 'Strutture di supporto', 'Inverter e accumulo', 'Cavi, connettori e vie cavi',
   'Quadri, protezioni e connessione', 'Monitoraggio', 'Opere edili in copertura', 'Opere civili e fondazioni',
   'Costi della sicurezza (All. XV D.Lgs. 81/08)', 'Coordinamento sicurezza CSP/CSE', 'Noli e sollevamenti', 'Manodopera e trasferte', 'Progettazione, pratiche e connessione'];
-const DM_STR_IDS = new Set(['steel', 'clamps_cp', 'st_budget', 'sheet_cp', 'gutter_cp', 'plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'mdo_steel']);
-const DM_EDI_IDS = new Set(['bess_base_site', 'bess_bump_site', 'bess_fence_site', 'bess_room_site', 'bess_base', 'bess_bump', 'bess_fence', 'bess_room', 'trench_rip', 'trench_x', 'demo_fibro', 'demo_guaina', 'guaina_new', 'sovr_inc', 'sovr_sub', 'sky_new', 'asb_test', 'asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'redo_corpo', 'demo_sheet', 'demo_sw', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
+const DM_STR_IDS = new Set(['steel', 'clamps_cp', 'st_budget', 'sheet_cp', 'gutter_cp', 'plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'mdo_steel', 'ballast_blk', 'ballast_tr', 'ballast_bed', 'plate_test', 'micropile', 'mp_mob', 'mp_drill', 'mp_tube', 'mp_grout', 'mp_cap', 'mp_test', 'anch_plate', 'anch_bolt', 'slab_survey', 'slab_core', 'pull_test']);
+const DM_EDI_IDS = new Set(['bess_base_site', 'bess_bump_site', 'bess_fence_site', 'bess_room_site', 'bess_base', 'bess_bump', 'bess_fence', 'bess_room', 'trench_rip', 'trench_demo', 'trench_binder', 'trench_frez', 'trench_tapp', 'trench_demo_cls', 'trench_cls_pav', 'trench_mesh', 'trench_pav', 'trench_stab', 'trench_green', 'trench_x', 'demo_fibro', 'demo_guaina', 'guaina_new', 'sovr_inc', 'sovr_sub', 'sky_new', 'asb_test', 'asb_rem', 'asb_plan', 'asb_mon', 'redo_grec', 'redo_corpo', 'demo_sheet', 'demo_sw', 'sandwich', 'flashing', 'asphalt', 'trench', 'pit', 'marking', 'bumper']);
 // classe DM di una voce del computo (per l'importo V dei compensi): imp, str, edi o '' se esclusa
 function dmClass(it, mode, isSite) {
   if (it.cat === SITE_CAT.PRO || it.cat === SITE_CAT.CSP) return '';
   if (isSite) return 'imp';
   if (DM_EDI_IDS.has(it.id)) return 'edi';
   if (it.id === 'reinf_steel' || it.id === 'reinf_frp' || it.id === 'reinf_corpo') return 'str';
-  if (mode === 'carport' && (DM_STR_IDS.has(it.id) || it.id === 'crane' || it.id === 'excav')) return 'str';
+  if (mode === 'carport' && (DM_STR_IDS.has(it.id) || it.id === 'crane' || it.id === 'excav' || it.id === 'crane_blk')) return 'str';
   return 'imp';
 }
 const DESIGN_IDS = ['prog_el', 'prog_str', 'collaudo', 'deposito', 'lightning', 'vvf_doc', 'dl', 'dm_prog_el', 'dm_dl_el', 'dm_coll_el', 'dm_prog_ed', 'dm_dl_ed', 'dm_coll_ed', 'int_prog_el', 'int_dl_el', 'int_prog_ed', 'int_dl_ed'];
@@ -1697,7 +2017,7 @@ function computeSite(site) {
     const cp = r.sec.mode === 'carport';
     if (it.id === 'reinf_steel' || it.id === 'reinf_frp' || it.id === 'reinf_corpo') vStr += it.tot;
     else if (EDI_IDS.has(it.id)) vEdi += it.tot;
-    else if (cp && (STR_IDS.has(it.id) || it.id === 'crane' || it.id === 'excav')) vStr += it.tot;
+    else if (cp && (STR_IDS.has(it.id) || it.id === 'crane' || it.id === 'excav' || it.id === 'crane_blk')) vStr += it.tot;
     else vImp += it.tot;
   }
   for (const it of items) if (it.cat !== K.PRO) vImp += it.qty * it.unit * (it.mat ? 1 - discF : 1);
@@ -1813,7 +2133,7 @@ function computeSite(site) {
 }
 
 const SIC_CAT = 'Costi della sicurezza (All. XV D.Lgs. 81/08)', CSP_CAT = 'Coordinamento sicurezza CSP/CSE';
-const api = { bessCalc, bessUnitPrice, BESS_UNITS, SIC_CAT, CSP_CAT, DESIGN_IDS, dmClass, compute, computeSite, DM_Q, DM_CAT, DM_DEFAULTS, DM_DEF_EL, DM_DEF_ED, DM_DEF_SIC, dmP, dmSpese, CAT_ORDER_ALL, ST_DEFAULTS, MOD_PRESETS, INV_PRESETS, ROOF_TYPES, PRICES, qsk, pickAC, nextIn, tica };
+const api = { bessCalc, bessUnitPrice, BESS_UNITS, SIC_CAT, CSP_CAT, DESIGN_IDS, dmClass, compute, computeSite, DM_Q, DM_CAT, DM_DEFAULTS, DM_DEF_EL, DM_DEF_ED, DM_DEF_SIC, dmP, dmSpese, CAT_ORDER_ALL, ST_DEFAULTS, MOD_PRESETS, INV_PRESETS, ROOF_TYPES, PRICES, qsk, windQp, canopyCf, ballastCheck, WIND_ZONES, EXP_CATS, SURF_TYPES, MP_SOILS, MP_TUBES, ANCH_SIZES, groupForces, trenchItems, pickAC, nextIn, tica };
 if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PVEngine = api;
 })(this);
 </script>
@@ -1827,7 +2147,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 function commonDefault() {
   return {
     conn: 'auto', new_trafo: false, trafo_kva: 0, cci: 'auto', vvf: true, monitor: true, bess_kwh: 0, bess_kw: 0, bess_fmt: 'auto', bess_place: 'outdoor', bess_l: 30, conn_cost: 0,
-    t_min: -15, t_max: 70, snow_zone: 'I-A', altitude: 345,
+    t_min: -15, t_max: 70, snow_zone: 'I-A', altitude: 345, wind_zone: 1, exp_cat: 'III', ct_topo: 1,
     team: 4, h_day: 8, cost_h: 30, carp_cost_h: 34, km: 30, eur_km: 0.5, trasf_pp: 0,
     prog_el: true, lightning_doc: true, dl: true,
     coord_pct: 1.2, multi_imp: true, disc_mat: 0, transport: 3, contingency: 5,
@@ -1854,11 +2174,11 @@ function sectionStateDefault(mode) {
     ov: {}, qov: {}
   };
   if (mode === 'bess') return { bs_on: true, bs_kwh: 430, bs_kw: 0, bs_fmt: 'auto', bs_place: 'outdoor', bs_l: 30, bs_ems: true,
-    k_group_ac: 0.8, t_amb: 40, cable_index: 1.0, trench_m: 0, trench_surf: 'asfalto', trench_cross: 0, ov: {}, qov: {} };
+    k_group_ac: 0.8, t_amb: 40, cable_index: 1.0, trench_m: 0, trench_surf: 'asfalto', trench_cross: 0, trench_rip_w: 0.6, trench_tapp_w: 1.0, trench_lay: 'auto', ov: {}, qov: {} };
   if (mode === 'roof') return Object.assign(base, {
     roof_type: 'grecata', roof_area: 2600, fill: 0, kwp_target: 300,
     roof_capacity: 25, ballast_kg: null, roof_work: 'nessuno', asb_m2: 0, asb_redo: 'sandwich', redo_m2: 0, asb_mon: true, sw_th: 60, redo_mode: 'param', redo_corpo: 0, guaina_rem: true, asb_test: true, sky_new_m2: 0,
-    reinf_kg: 0, reinf_frp_m2: 0, reinf_corpo: 0, reinf_desc: '', trench_m: 0, trench_surf: 'asfalto', trench_cross: 0,
+    reinf_kg: 0, reinf_frp_m2: 0, reinf_corpo: 0, reinf_desc: '', trench_m: 0, trench_surf: 'asfalto', trench_cross: 0, trench_rip_w: 0.6, trench_tapp_w: 1.0, trench_lay: 'auto',
     fall_prot: 'auto', nets_m2: null, walk_m2: null, fall_kit: 'auto',
     eave_h: 8, perimeter: 0, edge_pct: 100, skylight_m2: null, lifeline_m: 0,
     lift: 'gru', lift_days: 0, ple: true, ple_days: 0, storage_m2: 0, scaf_m: 0, towers: 0, equip: true, prog_str: true
@@ -1866,8 +2186,11 @@ function sectionStateDefault(mode) {
   return Object.assign(base, {
     l_dc: 30, l_ac1: 15, l_ac2: 80,
     stalls: 80, layout: 'doppia', stall_w: 2.5, cov_depth: 5.0, span: 5.0, steel_kgm2: 0,
-    found: 'plinto', plinth_m3: 0, cover: 'nessuna', gutters: true, led: true, ev_n: 0,
-    trench_m: 80, trench_surf: 'asfalto', trench_cross: 0, fence_m: 0, equip: false,
+    found: 'plinto', plinth_m3: 0, h_cp: 3.5, tilt_cp: 7, phi_cp: 0.5, duo_shape: 'a', col_off: 0.5,
+    blk_h: 0.8, blk_b: 0, blk_l: 0, blk_gam: 24, blk_mu: 0.5, p_adm: 150,
+    mp_soil: 'sabbia', mp_d: 200, mp_s: 1.2, mp_n: 0, mp_L: 0,
+    anc_base: 'soletta', slab_t: 0.20, slab_panel: 5, anc_plate: 0, anc_pl_b: 1.5, anc_pl_l: 0, anc_pl_h: 0.8, cover: 'nessuna', gutters: true, led: true, ev_n: 0,
+    trench_m: 80, trench_surf: 'asfalto', trench_cross: 0, trench_rip_w: 0.6, trench_tapp_w: 1.0, trench_lay: 'auto', fence_m: 0, equip: false,
     ple: true, crane_days: 0, tele_days: 0, ple_days: 0, excav_days: 0
   });
 }
@@ -1971,7 +2294,10 @@ const ML = { roof: 'Tetto', carport: 'Pensilina', bess: 'Accumulo' };
 const secLabel = (r) => r.sec.mode === 'bess' ? `Accumulo · ${nf(r.d.bess ? r.d.bess.E : 0)} kWh / ${nf(r.d.bess ? r.d.bess.kW : 0)} kW` : `${ML[r.sec.mode]} · ${nf(r.d.Nmod)} moduli · ${r.d.Ninv} × ${nf(r.d.I.pac)} kW`;
 const TRENCH_FIELDS = (R) => [
   { k: 'trench_m', l: 'Lunghezza dello scavo', u: 'm', h: R ? 'Tratto interrato dalla calata dal tetto al locale tecnico. 0 = linee solo in aereo o in cunicolo.' : 'Fino al locale tecnico o alla cabina.' },
-  { k: 'trench_surf', l: 'Pavimentazione da ripristinare', t: 'sel', o: [['asfalto', 'Asfalto · 30 €/m²'], ['cls', 'Calcestruzzo industriale · 65 €/m²'], ['terreno', 'Terreno o verde (nessun ripristino)']], show: (s) => s.trench_m > 0 },
+  { k: 'trench_surf', l: 'Pavimentazione da ripristinare', t: 'sel', wide: true, o: [['asfalto', 'Asfalto · demolizione + binder 8 cm + tappeto 3 cm (≈ 59 €/m² di traccia)'], ['cls', 'Calcestruzzo industriale · demolizione + getto 20 cm armato al quarzo (≈ 124 €/m²)'], ['masselli', 'Masselli autobloccanti · rimozione e ricollocamento (≈ 32 €/m², stima)'], ['stabilizzato', 'Ghiaia o misto stabilizzato (≈ 8 €/m²)'], ['verde', 'Verde · terra vegetale e semina (≈ 7 €/m², stima)'], ['terreno', 'Sterrato (nessun ripristino)']], show: (s) => s.trench_m > 0, h: 'Prezzi da prezzari regionali (FVG 2025, Emilia-Romagna, VdA 2025) al netto di spese generali e utile (÷ 1,265): il ricarico si applica nel riepilogo. Le singole voci restano modificabili nel computo.' },
+  { k: 'trench_rip_w', l: 'Larghezza della traccia da ripristinare', u: 'm', step: 0.05, show: (s) => s.trench_m > 0 && s.trench_surf !== 'terreno', h: 'Scavo 0,40 m + 10 cm di taglio per lato.' },
+  { k: 'trench_tapp_w', l: 'Larghezza del tappeto d\'usura', u: 'm', step: 0.1, show: (s) => s.trench_m > 0 && (s.trench_surf || 'asfalto') === 'asfalto', h: 'Il tappeto definitivo sormonta la traccia: le fasce laterali vengono fresate. Su strada pubblica il regolamento comunale può imporre l\'intera corsia.' },
+  { k: 'trench_lay', l: 'Stesa del conglomerato', t: 'sel', o: [['auto', 'Automatica (a mano sotto 100 m²)'], ['macchina', 'Con vibrofinitrice'], ['mano', 'A mano / piccoli mezzi (+30%)']], show: (s) => s.trench_m > 0 && (s.trench_surf || 'asfalto') === 'asfalto' },
   { k: 'trench_cross', l: 'Attraversamenti (sottoservizi, strade)', u: 'cad', show: (s) => s.trench_m > 0, h: 'Spingitubo o scavo a mano: 650 € cad. (stima).' }
 ];
 function bessGroups() {
@@ -2041,8 +2367,30 @@ function secGroups(mode) {
       { k: 'span', l: 'Interasse pilastri', u: 'm', step: 0.1 },
       { k: 'kwp_target', l: 'Potenza obiettivo', u: 'kWp', h: '0 = copri tutta la pensilina.' },
       { k: 'steel_kgm2', l: 'Incidenza acciaio', u: 'kg/m²', step: 0.5, auto: (r) => nf(r.d.steelKgm2, 1), h: 'Stima da carico neve: sostituire con il valore dello strutturista.' },
-      { k: 'found', l: 'Fondazioni', t: 'sel', o: [['plinto', 'Plinti in c.a.'], ['micropali', 'Micropali']] },
+      { k: 'h_cp', l: 'Altezza massima pensilina', u: 'm', step: 0.1, h: 'Quota di riferimento per il vento (bordo più alto).' },
+      { k: 'tilt_cp', l: 'Inclinazione falda', u: '°', step: 1 },
+      { k: 'duo_shape', l: 'Forma delle due falde', t: 'sel', o: [['a', 'A capanna (displuvio verso l\'esterno)'], ['v', 'A farfalla / V (compluvio centrale)']], show: (s) => s.layout === 'doppia' },
+      { k: 'col_off', l: 'Distanza pilastro dal bordo posteriore', u: 'm', step: 0.1, show: (s) => s.layout !== 'doppia', h: '0 = pilastro sul bordo, sbalzo intero.' },
+      { k: 'phi_cp', l: 'Grado di bloccaggio φ', t: 'sel', num: true, o: [[0, '0 · libera sotto'], [0.5, '0,5 · auto parcheggiate (consigliato)'], [1, '1 · chiusa sottovento']], h: 'Circ. C3.3.8.2: aumenta la depressione.' },
+      { k: 'found', l: 'Fondazioni', t: 'sel', o: [['plinto', 'Plinti in c.a.'], ['micropali', 'Micropali con cordolo'], ['zavorra', 'Zavorre prefabbricate (senza scavo)'], ['ancoraggio', 'Ancoraggio a staffe su soletta o plinto esistente']] },
+      { k: 'mp_soil', l: 'Terreno del bulbo', t: 'sel', o: [['ghiaia', 'Ghiaie e sabbie dense · qs 150 kPa'], ['sabbia', 'Sabbie medie · qs 100 kPa'], ['limo', 'Limi e sabbie limose · qs 70 kPa'], ['argilla', 'Argille consistenti · qs 50 kPa'], ['riporto', 'Riporti e terreni sciolti · qs 30 kPa'], ['roccia', 'Roccia tenera o alterata · qs 250 kPa']], show: (s) => s.found === 'micropali', h: 'Attrito laterale indicativo per iniezione a bassa pressione: sostituire con il dato del geotecnico.' },
+      { k: 'mp_d', l: 'Diametro di perforazione', u: 'mm', step: 10, show: (s) => s.found === 'micropali' },
+      { k: 'mp_s', l: 'Interasse micropali nel cordolo', u: 'm', step: 0.1, show: (s) => s.found === 'micropali', h: 'Trasversale alla fila: più è largo, minore è il tiro.' },
+      { k: 'mp_n', l: 'Micropali per pilastro', u: 'pz', auto: (r) => r.d.mp ? nf(r.d.mp.n, 0) : '', show: (s) => s.found === 'micropali', h: 'Vuoto = scelta automatica tra 2 e 4 (la più economica verificata).' },
+      { k: 'mp_L', l: 'Lunghezza micropalo', u: 'm', step: 0.5, auto: (r) => r.d.mp ? nf(r.d.mp.L, 1) : '', show: (s) => s.found === 'micropali', h: 'Vuoto = calcolata dal tiro e dalla compressione al piede.' },
+      { k: 'anc_base', l: 'Supporto esistente', t: 'sel', o: [['soletta', 'Pavimentazione / soletta in c.a.'], ['plinto', 'Plinto o cordolo esistente']], show: (s) => s.found === 'ancoraggio' },
+      { k: 'slab_t', l: 'Spessore soletta', u: 'm', step: 0.01, show: (s) => s.found === 'ancoraggio' && s.anc_base !== 'plinto' },
+      { k: 'slab_panel', l: 'Lato dei riquadri tra i giunti', u: 'm', step: 0.5, show: (s) => s.found === 'ancoraggio' && s.anc_base !== 'plinto', h: 'La soletta collabora solo all\'interno del riquadro.' },
+      { k: 'anc_pl_b', l: 'Plinto esistente: lato trasversale', u: 'm', step: 0.05, show: (s) => s.found === 'ancoraggio' && s.anc_base === 'plinto' },
+      { k: 'anc_pl_l', l: 'Plinto esistente: lato lungo la fila', u: 'm', step: 0.05, show: (s) => s.found === 'ancoraggio' && s.anc_base === 'plinto', h: 'Vuoto = quadrato.' },
+      { k: 'anc_pl_h', l: 'Plinto esistente: altezza', u: 'm', step: 0.05, show: (s) => s.found === 'ancoraggio' && s.anc_base === 'plinto' },
+      { k: 'anc_plate', l: 'Lato piastra di base', u: 'm', step: 0.05, auto: (r) => r.d.anc ? nf(r.d.anc.plB, 2) : '', show: (s) => s.found === 'ancoraggio', h: 'Vuoto = la più piccola che verifica i tasselli (0,5–1,0 m).' },
       { k: 'plinth_m3', l: 'Volume per plinto', u: 'm³', step: 0.1, auto: (r) => nf(r.d.plinthM3, 2), show: (s) => s.found === 'plinto' },
+      { k: 'blk_h', l: 'Altezza blocco zavorra', u: 'm', step: 0.05, show: (s) => s.found === 'zavorra' },
+      { k: 'blk_b', l: 'Lato blocco trasversale', u: 'm', step: 0.05, auto: (r) => nf(r.d.blk.B, 2), show: (s) => s.found === 'zavorra', h: 'Calcolato a equilibrio: inserire solo per imporre una misura.' },
+      { k: 'blk_l', l: 'Lato lungo la fila', u: 'm', step: 0.05, auto: (r) => nf(r.d.blk.L, 2), show: (s) => s.found === 'zavorra', h: 'Vuoto = blocco quadrato. Allungarlo riduce l\'ingombro negli stalli ma aumenta il peso.' },
+      { k: 'blk_mu', l: 'Attrito blocco–pavimentazione μ', step: 0.05, show: (s) => s.found === 'zavorra' || s.found === 'ancoraggio' },
+      { k: 'p_adm', l: 'Pressione ammissibile piano di posa', u: 'kPa', step: 10, show: (s) => s.found === 'zavorra' || s.found === 'ancoraggio', h: 'Dato della relazione geotecnica / prove su piastra.' },
       { k: 'cover', l: 'Tenuta all\'acqua', t: 'sel', o: [['nessuna', 'Solo moduli (non stagna)'], ['lamiera', 'Lamiera grecata sottomodulo']] },
       { k: 'gutters', l: 'Gronde e pluviali', t: 'chk' },
       { k: 'led', l: 'Illuminazione LED', t: 'chk' },
@@ -2190,7 +2538,10 @@ const COMMON_GROUPS = [
   { id: 'clima', title: 'Località e clima', sub: 'Valgono per tutte le sezioni', open: true, fields: [
     { k: 't_min', l: 'Temperatura minima di sito', u: '°C', h: 'Determina la Voc massima di stringa.' }, { k: 't_max', l: 'Temperatura massima cella', u: '°C' },
     { k: 'snow_zone', l: 'Zona di carico neve', t: 'sel', o: [['I-A', 'I · Alpina'], ['I-M', 'I · Mediterranea'], ['II', 'II'], ['III', 'III']] },
-    { k: 'altitude', l: 'Quota del sito', u: 'm s.l.m.' }
+    { k: 'altitude', l: 'Quota del sito', u: 'm s.l.m.' },
+    { k: 'wind_zone', l: 'Zona di vento', t: 'sel', num: true, o: [[1, '1 · VdA, Piemonte, Lombardia, TAA, Veneto, FVG'], [2, '2 · Emilia-Romagna'], [3, '3 · Toscana, Marche, Umbria, Lazio, Abruzzo, Molise, Puglia, Campania, Basilicata, Calabria'], [4, '4 · Sicilia e prov. Reggio C.'], [5, '5 · Sardegna orientale'], [6, '6 · Sardegna occidentale'], [7, '7 · Liguria'], [8, '8 · Provincia di Trieste'], [9, '9 · Isole minori e mare aperto']], wide: true, h: 'NTC 2018 Tab. 3.3.I. Serve per le pensiline.' },
+    { k: 'exp_cat', l: 'Categoria di esposizione', t: 'sel', o: [['I', 'I · costa/mare aperto'], ['II', 'II · aperta campagna, entro 10–30 km dal mare'], ['III', 'III · periferie, aree industriali, entroterra'], ['IV', 'IV · aree urbane dense'], ['V', 'V · centri urbani con edifici alti']], h: 'NTC 2018 Fig. 3.3.2: dipende da classe di rugosità, distanza dal mare e quota.' },
+    { k: 'ct_topo', l: 'Coefficiente topografico ct', step: 0.05, h: '1 salvo creste, colline isolate, scarpate.' }
   ] },
   { id: 'conn', title: 'Connessione e quadri di sito', sub: 'Un solo punto di connessione · CEI 0-21 / CEI 0-16', open: true, fields: [
     { k: 'conn', l: 'Connessione', t: 'sel', o: [['auto', 'Automatica sul totale di sito (BT fino a 100 kW, poi MT)'], ['BT', 'BT · CEI 0-21'], ['MT', 'MT · CEI 0-16 (cabina utente)']], wide: true },
@@ -2262,7 +2613,7 @@ function fieldHTML(f, o, scope) {
   const help = f.h ? `<span class="help">${esc(f.h)}</span>` : '';
   const da = `data-k="${f.k}" data-scope="${scope}"`;
   if (f.t === 'chk') return `<label class="fld chk" data-row for="${id}"><input type="checkbox" id="${id}" ${da} ${v ? 'checked' : ''}><span>${esc(f.l)}</span>${help}</label>`;
-  if (f.t === 'sel') return `<div class="fld${f.wide ? ' wide' : ''}" data-row><label for="${id}">${esc(f.l)}</label><select id="${id}" ${da}>${f.o.map(([ov, ol]) => `<option value="${esc(ov)}" ${String(v) === ov ? 'selected' : ''}>${esc(ol)}</option>`).join('')}</select>${help}${f.src ? `<span class="help src" id="src_${scope}"></span>` : ''}</div>`;
+  if (f.t === 'sel') return `<div class="fld${f.wide ? ' wide' : ''}" data-row><label for="${id}">${esc(f.l)}</label><select id="${id}" ${da}>${f.o.map(([ov, ol]) => `<option value="${esc(ov)}" ${String(v) === String(ov) ? 'selected' : ''}>${esc(ol)}</option>`).join('')}</select>${help}${f.src ? `<span class="help src" id="src_${scope}"></span>` : ''}</div>`;
   if (f.t === 'text') return `<div class="fld wide" data-row><label for="${id}">${esc(f.l)}</label><input type="text" id="${id}" ${da} value="${esc(v ?? '')}">${help}</div>`;
   const val = (v === null || v === undefined || (f.auto && v === 0)) ? '' : v;
   return `<div class="fld" data-row><label for="${id}">${esc(f.l)}</label><div class="inp"><input type="number" inputmode="decimal" id="${id}" ${da} step="${f.step || 1}" value="${val}"><span class="u">${esc(f.u || '')}</span></div>${help}${f.rng ? `<span class="help src" data-rng="${id}"></span>` : ''}</div>`;
@@ -2310,7 +2661,7 @@ function onField(el) {
   const f = FORM && FORM.fields.find(x => x.k === k);
   let v;
   if (el.type === 'checkbox') v = el.checked;
-  else if (el.tagName === 'SELECT' || el.type === 'text') v = el.value;
+  else if (el.tagName === 'SELECT' || el.type === 'text') v = (f && f.num) ? parseFloat(el.value) : el.value;
   else { v = el.value === '' ? (f && f.blankNull ? null : 0) : parseFloat(el.value); if (Number.isNaN(v)) return; }
   if (k === 'mod_preset') { if (v !== 'custom') { o.mod = clone(E.MOD_PRESETS[v]); } o.mod_preset = v; syncForm(); }
   else if (k === 'inv_preset') { if (v !== 'custom' && v !== 'auto') o.inv = clone(E.INV_PRESETS[v]); o.inv_preset = v; syncForm(); }
@@ -2515,7 +2866,9 @@ function dimsBlock(r, S) {
     ['Durata stimata della sezione', `${d.daysTot} giorni · ${nf(d.hTot + (d.hSteel || 0), 0)} h`]
   ];
   if (r.sec.mode === 'roof') { rows.unshift(['Superficie utile', `${nf(d.Autil, 0)} m² (fattore ${nf(d.fill, 2)}) · max ${d.Nmax} moduli`]); rows.push(['Carico aggiunto', nf(d.loadKgm2, 1) + ' kg/m²']); }
-  else { rows.unshift(['Pensilina', `${d.stalls} stalli · ${d.wings} ${d.wings > 1 ? 'file' : 'fila'} × ${nf(d.Lrow, 1)} m · moduli in ${d.orient} · max ${d.Nmax}`]); rows.push(['Neve di progetto', `qsk ${nf(d.qsk, 2)} · qs ${nf(d.qs, 2)} kN/m²`]); rows.push(['Struttura', `${d.ncol} pilastri · ${nf(d.steelT, 1)} t acciaio (${nf(d.steelKgm2, 1)} kg/m²)`]); }
+  else { rows.unshift(['Pensilina', `${d.stalls} stalli · ${d.wings} ${d.wings > 1 ? 'file' : 'fila'} × ${nf(d.Lrow, 1)} m · moduli in ${d.orient} · max ${d.Nmax}`]); rows.push(['Neve di progetto', `qsk ${nf(d.qsk, 2)} · qs ${nf(d.qs, 2)} kN/m²`]); rows.push(['Vento di progetto', `zona ${d.wind.zone} · cat. ${d.wind.cat} · qp ${nf(d.qp, 2)} kN/m² · cf +${nf(d.cf.max, 2)} / ${nf(d.cf.min, 2)}${d.windGov ? ' · governa il vento' : ''}`]); rows.push(['Struttura', `${d.ncol} pilastri · ${nf(d.steelT, 1)} t acciaio (${nf(d.steelKgm2, 1)} kg/m²)`]);
+    const fo = r.sec && r.sec.state ? r.sec.state.found : null;
+    rows.push(['Fondazioni', d.blk && (fo === 'zavorra' || (!fo && d.blkTrips)) ? `zavorre ${nf(d.blk.B, 2)}×${nf(d.blk.L, 2)}×${nf(d.blk.h, 2)} m · ${nf(d.blk.t, 1)} t/pilastro · ${nf(d.blk.tTot, 0)} t totali${d.blk.ok ? '' : ' · NON verificate'}` : fo === 'micropali' && d.mp ? `${d.mp.n} micropali/pilastro · L ${nf(d.mp.L, 1)} m · ${d.mp.tube.n} · tiro ${nf(d.mp.T, 0)} kN${d.mp.ok ? '' : ' · NON verificati'}` : fo === 'ancoraggio' && d.anc ? `${d.anc.pick.n} × ${d.anc.pick.sz.n} su ${d.anc.base} · ${nf(d.anc.el.t_, 1)} t disponibili su ${nf(d.anc.needT, 1)} t richieste${d.anc.ok ? '' : ' · NON verificato'}` : `plinti ${nf(d.plinthM3, 2)} m³ · equilibrio puro ${nf(d.blk.t, 1)} t`]); }
   return `<section class="blk"><div class="blkhead"><h2>Dimensionamento</h2><p>Valori calcolati</p></div><dl class="dims">${rows.map(([a, b]) => `<div><dt>${esc(a)}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl></section>`;
 }
 function boqBlock(title, sub, items, scope, ov, tot, isCommon) {
@@ -2687,7 +3040,7 @@ function printSite(full) {
   h += printFees(R);
   h += `<h2>Ipotesi principali</h2><table><tbody>
     <tr><td>Temperature di progetto</td><td>${C.t_min} °C / ${C.t_max} °C cella</td><td>Squadra</td><td>${C.team} persone × ${C.h_day} h · ${nf(C.cost_h, 1)} €/h</td></tr>
-    <tr><td>Neve (pensiline)</td><td>zona ${esc(C.snow_zone)} · ${C.altitude} m s.l.m.</td><td>Distanza cantiere</td><td>${C.km} km</td></tr>
+    <tr><td>Neve e vento (pensiline)</td><td>neve zona ${esc(C.snow_zone)} · vento zona ${esc(C.wind_zone || 1)}, cat. ${esc(C.exp_cat || 'III')} · ${C.altitude} m s.l.m.</td><td>Distanza cantiere</td><td>${C.km} km</td></tr>
     <tr><td>Progettazione e DL</td><td colspan="3">${['el', 'ed', 'sic'].map(k => { const src = { el: C.el_src, ed: C.ed_src, sic: C.sic_src }[k]; const nm = { el: 'elettrico', ed: 'edile/strutturale', sic: 'sicurezza' }[k]; const F = R.sd.fees && R.sd.fees[k]; return `${nm}: ${src === 'dm' ? 'DM parametri' + (F ? ' ' + eur(F.net * R.sd.fees.kS) : '') : src === 'interna' ? 'interna' : 'forfait'}`; }).join(' · ')}${R.sd.fees && R.sd.fees.total ? ` · V impianti ${eur(R.sd.fees.V.imp)} (${esc(C.dm_cat_imp)}), strutture ${eur(R.sd.fees.V.str)} (${esc(C.dm_cat_str)}), edilizia ${eur(R.sd.fees.V.edi)} (${esc(C.dm_cat_edi)})` : ''}</td></tr>
     <tr><td>Trasporto / imprevisti</td><td>${nf(C.transport, 1)}% / ${nf(C.contingency, 1)}%</td><td>Sconto materiali</td><td>${nf(C.disc_mat, 1)}%</td></tr>
     ${R.res.map(r => r.isBess && r.d.bess ? `<tr><td>${esc(r.sec.name)}</td><td colspan="3">Accumulo LFP ${nf(r.d.bess.E)} kWh / ${nf(r.d.bess.kW)} kW · ${r.d.bess.n} × ${r.d.bess.fmt === 'container' ? 'container' : 'cabinet'} · ${r.sec.state.bs_place === 'indoor' ? 'in locale dedicato' : 'all\'aperto su basamento'} · ${nf(r.d.bess.unit)} €/kWh sistema</td></tr>` : `<tr><td>${esc(r.sec.name)}</td><td colspan="3">${esc(r.sec.state.mod ? r.sec.state.mod.name : '')} · ${r.sec.mode === 'roof' ? esc((E.ROOF_TYPES[r.sec.state.roof_type] || {}).name || '') : `${r.d.stalls || 0} stalli`} · struttura ${r.sec.state.st && r.sec.state.st.mode === 'budget' ? 'a budget' : 'scomposta'}${r.d.Ns ? ` · stringhe ${r.d.Nstr} × ${r.d.Ns}` : ''}</td></tr>`).join('')}
@@ -3119,8 +3472,8 @@ const QES_ORDER = ['Struttura', 'Plinti e/o basamenti', 'Copertura', 'Pannelli f
   'Rinforzi strutturali', 'Basamenti e opere civili accumulo', 'Scavi e cavidotti', 'Opere accessorie', 'Pratiche di connessione e certificazioni', 'Corrispettivi al distributore (TICA e connessione)', 'Altre opere impiantistiche', 'Altre opere edili'];
 const QES_SET = (a) => new Set(a);
 const Q_COVER = QES_SET(['asb_rem', 'asb_plan', 'asb_mon', 'asb_test', 'sovr_inc', 'sovr_sub', 'demo_fibro', 'demo_sheet', 'demo_sw', 'demo_guaina', 'guaina_new', 'sandwich', 'redo_grec', 'redo_corpo', 'flashing', 'sky_new', 'lifeline', 'lifeline_doc']);
-const Q_TRENCH = QES_SET(['trench', 'pit', 'trench_rip', 'trench_x', 'asphalt']);
-const Q_FOUND = QES_SET(['plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'excav']);
+const Q_TRENCH = QES_SET(['trench', 'pit', 'trench_rip', 'trench_x', 'asphalt', 'trench_demo', 'trench_binder', 'trench_frez', 'trench_tapp', 'trench_demo_cls', 'trench_cls_pav', 'trench_mesh', 'trench_pav', 'trench_stab', 'trench_green']);
+const Q_FOUND = QES_SET(['plinth', 'soil', 'micropile', 'anchor_kit', 'geo', 'excav', 'ballast_blk', 'ballast_tr', 'ballast_bed', 'plate_test', 'crane_blk', 'mp_mob', 'mp_drill', 'mp_tube', 'mp_grout', 'mp_cap', 'mp_test', 'anch_plate', 'anch_bolt', 'slab_survey', 'slab_core', 'pull_test']);
 const Q_LINK = QES_SET(['ac1', 'ac2', 'tray_ac', 'link_qg']);
 const Q_CABIN = QES_SET(['mt_adeg', 'cci', 'm2', 'trafo', 'mt_cell']);
 const Q_QEMAT = QES_SET(['spi', 'ddi', 'ddr']);
